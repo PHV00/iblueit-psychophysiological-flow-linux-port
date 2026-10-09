@@ -80,24 +80,26 @@
       "url": "https://packages.unity.com"
     },
     "com.unity.ml-agents": {
-      "version": "file:C:/Users/Ney/Documents/ml-agents-release_21/com.unity.ml-agents",
+      "version": "https://github.com/Unity-Technologies/ml-agents.git?path=com.unity.ml-agents#release_21",
       "depth": 0,
-      "source": "local",
+      "source": "git",
       "dependencies": {
         "com.unity.sentis": "1.2.0-exp.2",
         "com.unity.modules.imageconversion": "1.0.0",
         "com.unity.modules.jsonserialize": "1.0.0",
         "com.unity.modules.physics": "1.0.0"
-      }
+      },
+      "hash": "7a03145ae48ad354821bd89e0243d99332149ace"
     },
     "com.unity.ml-agents.extensions": {
-      "version": "file:C:/Users/Ney/Documents/ml-agents-release_21/com.unity.ml-agents.extensions",
+      "version": "https://github.com/Unity-Technologies/ml-agents.git?path=com.unity.ml-agents.extensions#release_21",
       "depth": 0,
-      "source": "local",
+      "source": "git",
       "dependencies": {
         "com.unity.ml-agents": "3.0.0-exp.1",
         "com.unity.modules.physics": "1.0.0"
-      }
+      },
+      "hash": "7a03145ae48ad354821bd89e0243d99332149ace"
     },
     "com.unity.sentis": {
       "version": "1.2.0-exp.2",
@@ -107,6 +109,22 @@
         "com.unity.burst": "1.8.4",
         "com.unity.modules.jsonserialize": "1.0.0",
         "com.unity.modules.imageconversion": "1.0.0"
+      },
+      "url": "https://packages.unity.com"
+    },
+    "com.unity.sysroot": {
+      "version": "2.0.10",
+      "depth": 1,
+      "source": "registry",
+      "dependencies": {},
+      "url": "https://packages.unity.com"
+    },
+    "com.unity.sysroot.linux-x86_64": {
+      "version": "2.0.9",
+      "depth": 1,
+      "source": "registry",
+      "dependencies": {
+        "com.unity.sysroot": "2.0.10"
       },
       "url": "https://packages.unity.com"
     },
@@ -135,10 +153,20 @@
       "depth": 0,
       "source": "registry",
       "dependencies": {
+        "com.unity.modules.audio": "1.0.0",
         "com.unity.modules.director": "1.0.0",
         "com.unity.modules.animation": "1.0.0",
-        "com.unity.modules.audio": "1.0.0",
         "com.unity.modules.particlesystem": "1.0.0"
+      },
+      "url": "https://packages.unity.com"
+    },
+    "com.unity.toolchain.linux-x86_64": {
+      "version": "2.0.11",
+      "depth": 0,
+      "source": "registry",
+      "dependencies": {
+        "com.unity.sysroot": "2.0.10",
+        "com.unity.sysroot.linux-x86_64": "2.0.9"
       },
       "url": "https://packages.unity.com"
     },

@@ -121,18 +121,45 @@ namespace Ibit.Core.Serial
         public void SetTearDownFunction(TearDownFunction userFunction) => this.userDefinedTearDownFunction = userFunction;
 
         private static string[] GetPortNames()
-        {
-            if (Application.platform == RuntimePlatform.LinuxPlayer ||
-                Application.platform == RuntimePlatform.LinuxEditor ||
-                Application.platform == RuntimePlatform.OSXPlayer ||
-                Application.platform == RuntimePlatform.OSXEditor ||
-                Application.platform == RuntimePlatform.Android)
-            {
-                return Directory.GetFiles("/dev/").Where(port => port.StartsWith("/dev/ttyACM") || port.StartsWith("/dev/tty.usb") || port.StartsWith("/dev/ttyUSB")).ToArray();
-            }
+	{
+	    // Linux
+	    if (Application.platform == RuntimePlatform.LinuxPlayer ||
+		Application.platform == RuntimePlatform.LinuxEditor)
+	    {
+		const string pitacoVirtual = "/dev/ttyUSB90";
 
-            return SerialPort.GetPortNames(); //windows
-        }
+		// Se o bridge estiver ativo, usa SOMENTE a porta virtual.
+		if (File.Exists(pitacoVirtual))
+		{
+		    return new[]
+		    {
+		        pitacoVirtual
+		    };
+		}
+
+		// Fallback caso a porta virtual não exista.
+		return Directory
+		    .GetFiles("/dev/")
+		    .Where(port =>
+		        port.StartsWith("/dev/ttyACM") ||
+		        port.StartsWith("/dev/ttyUSB"))
+		    .ToArray();
+	    }
+
+	    // macOS
+	    if (Application.platform == RuntimePlatform.OSXPlayer ||
+		Application.platform == RuntimePlatform.OSXEditor)
+	    {
+		return Directory
+		    .GetFiles("/dev/")
+		    .Where(port =>
+		        port.StartsWith("/dev/tty.usb"))
+		    .ToArray();
+	    }
+
+	    // Windows
+    	return SerialPort.GetPortNames();
+	}
 
         private string AutoConnect()
         {
