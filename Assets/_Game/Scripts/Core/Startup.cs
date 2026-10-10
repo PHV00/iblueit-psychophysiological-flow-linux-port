@@ -3,7 +3,6 @@ using Assets._Game.Scripts.Core.Configuration;
 using Ibit.Core.Data.Constants;
 using Ibit.Core.Data.Manager;
 using Newtonsoft.Json;
-using UnityEditor;
 using UnityEngine;
 
 namespace Assets._Game.Scripts.Core
