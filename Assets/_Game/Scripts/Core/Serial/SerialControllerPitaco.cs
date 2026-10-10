@@ -46,6 +46,10 @@ namespace Ibit.Core.Serial
         private int baudRate = 115200;
 
         [SerializeField]
+        [Tooltip("Optional explicit PITACO bridge serial port (e.g. /dev/tnt0). If set, do not scan physical devices.")]
+        private string preferredPortName = "";
+
+        [SerializeField]
         [Tooltip("Maximum number of unread data messages in the queue. " +
             "New messages will be discarded.")]
         private int maxUnreadMessages = 1;
@@ -128,7 +132,7 @@ namespace Ibit.Core.Serial
                 Application.platform == RuntimePlatform.OSXEditor ||
                 Application.platform == RuntimePlatform.Android)
             {
-                return Directory.GetFiles("/dev/").Where(port => port.StartsWith("/dev/ttyACM") || port.StartsWith("/dev/tty.usb") || port.StartsWith("/dev/ttyUSB")).ToArray();
+                return Directory.GetFiles("/dev/").Where(port => port.StartsWith("/dev/ttyACM") || port.StartsWith("/dev/tty.usb") || port.StartsWith("/dev/ttyUSB") || port.StartsWith("/dev/tnt")).ToArray();
             }
 
             return SerialPort.GetPortNames(); //windows
@@ -136,7 +140,9 @@ namespace Ibit.Core.Serial
 
         private string AutoConnect()
         {
-            var ports = GetPortNames();
+            var ports = string.IsNullOrWhiteSpace(preferredPortName)
+                ? GetPortNames()
+                : new[] { preferredPortName.Trim() };
 
 #if !UNITY_EDITOR
             if (ports.Length < 1)
@@ -149,8 +155,10 @@ namespace Ibit.Core.Serial
                 {
                     ReadTimeout = 1000,
                     WriteTimeout = 1000,
-                    DtrEnable = true,
-                    RtsEnable = true,
+                    DtrEnable = Application.platform != RuntimePlatform.LinuxEditor &&
+                                Application.platform != RuntimePlatform.LinuxPlayer,
+                    RtsEnable = Application.platform != RuntimePlatform.LinuxEditor &&
+                                Application.platform != RuntimePlatform.LinuxPlayer,
                     Handshake = Handshake.None
                 };
 
