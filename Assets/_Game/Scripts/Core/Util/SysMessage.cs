@@ -7,14 +7,14 @@ namespace Ibit.Core.Util
     /// <summary>
     /// Windows keeps the original native message boxes.
     /// On Linux, informational messages are logged. Confirmation dialogs
-    /// deliberately return None until a proper Unity modal UI is implemented.
+    /// deliberately deny/cancel until a proper Unity modal UI is implemented.
     /// This prevents the port from approving actions silently.
     /// </summary>
     public class SysMessage
     {
         private static bool IsLinux =>
-            Application.platform == RuntimePlatform.LinuxEditor ||
-            Application.platform == RuntimePlatform.LinuxPlayer;
+            UnityEngine.Application.platform == RuntimePlatform.LinuxEditor ||
+            UnityEngine.Application.platform == RuntimePlatform.LinuxPlayer;
 
         public static DialogResult Show(string msg, string title = "")
         {
