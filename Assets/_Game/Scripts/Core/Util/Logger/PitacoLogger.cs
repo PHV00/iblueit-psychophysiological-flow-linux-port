@@ -39,13 +39,21 @@ namespace Ibit.Core.Util
             if (!isLogging || msg.Length < 1 || GameManager.GameIsPaused)
                 return;
 
+            // Status/boot/echo messages are not physiological samples.
+            // Keep numerical samples unchanged, independently of the OS locale.
+            if (!float.TryParse(msg.Trim().Replace(',', '.'),
+                    System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var value) || float.IsNaN(value) || float.IsInfinity(value))
+                return;
+
             flowDataDevice.FlowData.Add(new FlowData
             {
                 Date = DateTime.Now,
-                Value = Parsers.Float(msg)
+                Value = value
             });
 
-            sb.AppendLine($"{Time.time:F};{Parsers.Float(msg):F}");
+            sb.AppendLine($"{Time.time:F};{value:F}");
         }
     }
 }

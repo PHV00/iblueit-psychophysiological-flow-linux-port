@@ -96,9 +96,18 @@ namespace Ibit.MainMenu.UI
 
 #endif
 
-            StageModel.Loaded = stage;
-            // DeepDDA: Gameparameters
-            MapStageFromDto(FillStageList.stageDto);
+            if (stage == null)
+            {
+                Debug.LogError("StageLoader: a fase selecionada não possui StageModel.");
+                return;
+            }
+
+            // When offline, use a runtime copy of the original StageDb asset.
+            // Do not invent remote values or modify the serialized defaults.
+            StageModel.Loaded = FillStageList.stageDto == null ? Instantiate(stage) : stage;
+            if (FillStageList.stageDto != null)
+                MapStageFromDto(FillStageList.stageDto);
+
             FindObjectOfType<SceneLoader>().LoadScene(1);
             //Debug.Log($"Stage {stage.Id} loaded.");
         }

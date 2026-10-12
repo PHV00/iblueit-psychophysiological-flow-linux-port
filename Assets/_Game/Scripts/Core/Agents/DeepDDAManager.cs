@@ -16,7 +16,6 @@ using Ibit.Core;
 using Ibit.Core.Serial;
 using Ibit.Core.Data.Enums;
 using Ibit.Core.Util;
-using UnityEditor;
 
 public class DeepDDAManager: DeepDDAAgent
 {

@@ -19,27 +19,47 @@ namespace Ibit.MainMenu.UI
 
         private void OnEnable()
         {
-            if (!_populated)
+            if (_populated) return;
+
+            if (stageDb == null || stageDb.StageList == null || stageDb.StageList.Length == 0 || buttonPrefab == null)
             {
-                // Certifica-se de que StageDb está instanciado e StageList está pronta
-                if (stageDb.StageList != null)
-                {
-                    PopulateStageList();
-                    _populated = true;
-                }
-                else
-                {
-                    Debug.LogError("StageDb.StageList não está pronta ou é null.");
-                }
+                Debug.LogError("FillStageList: StageDb, StageList ou prefab dos botões não está configurado.");
+                return;
             }
+
+            if (Pacient.Loaded == null)
+            {
+                Debug.LogWarning("FillStageList: selecione um paciente antes de carregar as fases.");
+                return;
+            }
+
+            _populated = true;
+            PopulateStageList();
         }
 
         private async void PopulateStageList()
         {
-            // DeepDDA: Gameparameters
-            var gameparameterResponse = await DataManager.Instance.GetGameparameter(Pacient.Loaded.IdApi);
-            stageDto = gameparameterResponse.Data[0];
-            
+            // DeepDDA: keep remote parameters when available. Offline responses
+            // contain no data; in that case the serialized StageDb settings remain
+            // the source of the initial stage configuration.
+            stageDto = null;
+            try
+            {
+                var gameparameterResponse = await DataManager.Instance.GetGameparameter(Pacient.Loaded.IdApi);
+                stageDto = gameparameterResponse?.Data?.FirstOrDefault();
+            }
+            catch (System.Exception exception)
+            {
+                Debug.LogWarning($"FillStageList: não foi possível consultar parâmetros remotos: {exception.Message}");
+            }
+
+            if (stageDto == null)
+            {
+                Debug.LogWarning("FillStageList: parâmetros remotos indisponíveis. " +
+                    "Usando os parâmetros originais do StageDb para execução local de desenvolvimento; " +
+                    "não equivalem a uma configuração clínica validada.");
+            }
+
             foreach (var stage in stageDb.StageList)
             {
                 var item = Instantiate(buttonPrefab);
@@ -47,7 +67,7 @@ namespace Ibit.MainMenu.UI
                 item.transform.localScale = Vector3.one;
                 item.name = $"ITEM_F{stage.Phase}_L{stage.Level}";
                 item.AddComponent<StageLoader>().stage = stage;
-                if(stageDto.Phase == stage.Phase){
+                if(stageDto != null && stageDto.Phase == stage.Phase){
                     item.GetComponentInChildren<Text>().text = $"Fase: {stageDto.Phase} - Nível: {stageDto.Level}";
                 }
                 else{
