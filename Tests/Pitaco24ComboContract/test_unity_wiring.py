@@ -20,6 +20,7 @@ class UnityWiring(unittest.TestCase):
         self.assertIn("Pitaco24ComboFrame.TryParse(message, out sample)", text)
         self.assertIn("OnSerialMessageReceived?.Invoke(message);", text)
         self.assertNotIn("BleakClient", text)
+        self.assertIn("while (DateTime.UtcNow < echoDeadline)", text)
 
     def test_platform_and_minigames_accept_combined_bpm(self):
         for path in ("Plataform/Player/Player.cs", "WaterGame/Player.cs",

@@ -22,6 +22,9 @@ SerialControllerPitaco.Update()
 ```
 
 O handshake `echop` e comandos `e/r/f/c/z` sao preservados.
+O `SerialControllerPitaco` agora aguarda `echop` por uma janela limitada,
+ignorando linhas de dados antigas ou `P24` que eventualmente tenham ficado
+em fila antes da identificacao.
 O protocolo legado numerico (p.ex. `-23.15`) continua funcionando.
 O receptor discrimina novos frames por `P24,` e bloqueia quadros
 malformados, sem encaminhar strings CSV ao `Parsers.Float` dos minijogos.
