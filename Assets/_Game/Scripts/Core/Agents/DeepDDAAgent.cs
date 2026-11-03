@@ -237,7 +237,7 @@ public class DeepDDAAgent : Agent
         // Nao adicionar SpO2 experimental nem alterar reward/security.
         if (includePitaco24BpmObservations)
         {
-            float bpm;
+            float bpm = 0f;
             bool available = pitaco24Receiver != null &&
                 pitaco24Receiver.TryGetLatestCombinedBpm(out bpm);
             sensor.AddObservation(available ? Mathf.Clamp01((bpm - 35f) / 165f) : 0f);
