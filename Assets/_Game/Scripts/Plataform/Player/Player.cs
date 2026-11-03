@@ -26,6 +26,7 @@ namespace Ibit.Plataform
 
             scp.OnSerialMessageReceived += PositionOnSerialPitaco;
             scp.OnSerialMessageReceived += AnimatePitaco;
+            scp.OnPitaco24ComboReceived += PositionOnSerialPitaco24;
 
             scm.OnSerialMessageReceived += PositionOnSerialMano;
             scm.OnSerialMessageReceived += AnimateMano;

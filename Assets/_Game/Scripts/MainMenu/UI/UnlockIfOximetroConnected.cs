@@ -10,6 +10,7 @@ namespace Ibit.MainMenu.UI
 
         [SerializeField]
         private SerialControllerOximetro serialControllerOximetro;
+        [SerializeField] private SerialControllerPitaco serialControllerPitaco;
    
 
         private bool OximetroConnected = false;
@@ -20,14 +21,25 @@ namespace Ibit.MainMenu.UI
 
             if (serialControllerOximetro == null)
                 serialControllerOximetro = FindObjectOfType<SerialControllerOximetro>();
+            if (serialControllerPitaco == null)
+                serialControllerPitaco = FindObjectOfType<SerialControllerPitaco>();
+            RefreshAvailability();
+        }
 
+        private void Update()
+        {
+            // O primeiro P24 pode chegar depois de OnEnable, quando a COM
+            // ja esta conectada. Tambem invalida se a telemetria parar.
+            RefreshAvailability();
+        }
 
-            if (serialControllerOximetro.IsConnected)
-                OximetroConnected = true;
-
-
-
-            this.GetComponent<Button>().interactable = Pacient.Loaded != null && (OximetroConnected == true);
+        private void RefreshAvailability()
+        {
+            OximetroConnected =
+                (serialControllerOximetro != null && serialControllerOximetro.IsConnected) ||
+                (serialControllerPitaco != null && serialControllerPitaco.HasRecentPitaco24Combo);
+            this.GetComponent<Button>().interactable =
+                Pacient.Loaded != null && OximetroConnected;
         }
     }
 }

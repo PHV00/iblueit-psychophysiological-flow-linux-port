@@ -43,6 +43,7 @@ namespace Ibit.WaterGame
         public float HRValue;
         public float SPO2Value;
         public bool oxiActive = false;
+        public bool Pitaco24ComboBpmSource { get; private set; }
 
 
         private void Start()
@@ -62,6 +63,7 @@ namespace Ibit.WaterGame
             if (scp.IsConnected) // Se PITACO conectado
             {
                 scp.OnSerialMessageReceived += OnMessageReceivedPitaco;
+                scp.OnPitaco24ComboReceived += OnPitaco24ComboReceived;
                 scp.StartSamplingDelayed();
 
             }
@@ -129,11 +131,23 @@ namespace Ibit.WaterGame
             sensorValueCinta = Parsers.Float(msg);
         }
 
+        private void OnPitaco24ComboReceived(Pitaco24ComboFrame sample)
+        {
+            if (sco != null && sco.IsConnected)
+                return;
+
+            Pitaco24ComboBpmSource = sample.HasValidBpm;
+            oxiActive = sample.HasValidBpm;
+            HRValue = sample.HasValidBpm ? sample.Bpm : 0f;
+            SPO2Value = 0f;
+        }
+
         private void OnMessageReceivedOximetro(string msg)
         {
             if (msg.Length < 1)
                 return;
 
+            Pitaco24ComboBpmSource = false;
             oxiActive = true;
             string[] sensorValueOxi = msg.Split(',');
             HRValue = Parsers.Float(sensorValueOxi[0]);

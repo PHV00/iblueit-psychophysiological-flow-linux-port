@@ -44,6 +44,8 @@ namespace Ibit.Plataform
         public float SPO2Value; //Variável responsável por mostrar na tela a SPO2
         public float RRValue; //Variável responsável por mostrar na tela a frequência respiratória
         public bool oxiActive = false;
+        // UI: combo fornece HR, mas nao fornece SpO2 validada.
+        public bool Pitaco24ComboBpmSource { get; private set; }
         public float auxValuesOxi;
 
         public object outputDoPlayer { get; set; }
@@ -122,6 +124,21 @@ namespace Ibit.Plataform
             }
         }
 
+        private void PositionOnSerialPitaco24(Pitaco24ComboFrame frame)
+        {
+            // Priorizar oximetro independente quando ele estiver conectado,
+            // preservando o comportamento anterior do jogo.
+            if (sco != null && sco.IsConnected)
+                return;
+
+            Pitaco24ComboBpmSource = frame.HasValidBpm;
+            oxiActive = frame.HasValidBpm;
+            HRValue = frame.HasValidBpm ? frame.Bpm : 0f;
+            SPO2Value = 0f;  // indisponivel, nunca tratar como 0% medido
+            sensorValueOxiHR = HRValue;
+            sensorValueOxiSPO = 0f; // nao alimentar AdaptationGrid/alertas
+        }
+
         private void PositionOnSerialOximetro(string msg)
         {
             if (msg.Length < 1)
@@ -132,6 +149,7 @@ namespace Ibit.Plataform
                 // Se o Oxímetro estiver conectado
                 if (sco.IsConnected)
                 {
+                    Pitaco24ComboBpmSource = false;
                     oxiActive = true;
                     string[] auxValuesOxi = msg.Split(',');
                 

@@ -33,6 +33,13 @@ public class DeepDDAAgent : Agent
     [SerializeField] private Player player;
     [SerializeField] private PitacoLogger pitacoLogger;
 
+    // Desligado por padrao: habilitar SOMENTE com novo modelo/BehaviorParameters
+    // treinado com duas observacoes extras. Nenhuma recompensa e modificada.
+    [SerializeField]
+    [Tooltip("EXPERIMENTAL: acrescenta BPM P24 e mascara de validade (2 observacoes). Exige novo treinamento/espaco vetorial.")]
+    private bool includePitaco24BpmObservations = false;
+    private SerialControllerPitaco pitaco24Receiver;
+
     private int consecutiveTargetsHit = -1;
     private int consecutiveTargetsMiss = -1;
     private int consecutiveObstacleMiss = -1;
@@ -80,6 +87,7 @@ public class DeepDDAAgent : Agent
         spwn = FindObjectOfType<Spawner>();
         player = FindObjectOfType<Player>();
         pitacoLogger = FindObjectOfType<PitacoLogger>();
+        pitaco24Receiver = FindObjectOfType<SerialControllerPitaco>();
         StartCoroutine(SubscribeToEvents());
         lastBorgScale = Pacient.Loaded.CurrentBorgScale;
         lastPerformance = Pacient.Loaded.CurrentPerformance;
@@ -222,6 +230,18 @@ public class DeepDDAAgent : Agent
         {
             sensor.AddObservation(-Pacient.Loaded.CapacitiesPitaco.InsFlowDuration * GameManager.CapacityMultiplierPlataform);
             sensor.AddObservation(Pacient.Loaded.CapacitiesPitaco.ExpFlowDuration * GameManager.CapacityMultiplierPlataform);            
+        }
+
+        // Opt-in: apenas o BPM do firmware validado por G1/contato/recencia.
+        // A observacao 0 (ausencia) tem mascara 0, evitando confundir 0 bpm.
+        // Nao adicionar SpO2 experimental nem alterar reward/security.
+        if (includePitaco24BpmObservations)
+        {
+            float bpm;
+            bool available = pitaco24Receiver != null &&
+                pitaco24Receiver.TryGetLatestCombinedBpm(out bpm);
+            sensor.AddObservation(available ? Mathf.Clamp01((bpm - 35f) / 165f) : 0f);
+            sensor.AddObservation(available ? 1f : 0f);
         }
     }
 

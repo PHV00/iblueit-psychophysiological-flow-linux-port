@@ -1,0 +1,22 @@
+name: PITACO 2.4 Combo — contrato C# (sem Editor Unity)
+
+on:
+  pull_request:
+    paths:
+      - 'Assets/_Game/Scripts/Core/Serial/Pitaco24ComboFrame.cs'
+      - 'Tests/Pitaco24ComboContract/**'
+      - '.github/workflows/pitaco24-combo.yml'
+  push:
+    branches:
+      - feature/pitaco24-combo-unity-mlagents
+
+jobs:
+  parser-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Compilar e testar frame C# independente do Unity
+        run: dotnet run --project Tests/Pitaco24ComboContract/Pitaco24ComboContract.csproj --configuration Release

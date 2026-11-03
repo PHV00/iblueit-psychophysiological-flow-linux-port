@@ -92,6 +92,30 @@ namespace Ibit.Core.Serial
         public delegate void SerialMessageReceivedHandler(string msg);
         public event SerialMessageReceivedHandler OnSerialMessageReceived;
 
+        // Novo canal de dados na MESMA COM do PITACO; o evento numerico antigo
+        // continua alimentando Player, calibracao e minijogos sem alteracoes.
+        public event Action<Pitaco24ComboFrame> OnPitaco24ComboReceived;
+        private Pitaco24ComboFrame lastComboFrame;
+        private float lastComboFrameReceivedAt;
+
+        public bool HasRecentPitaco24Combo
+        {
+            get
+            {
+                return IsConnected && lastComboFrame != null &&
+                    (Time.realtimeSinceStartup - lastComboFrameReceivedAt) < 2f;
+            }
+        }
+
+        public bool TryGetLatestCombinedBpm(out float bpm)
+        {
+            bpm = 0f;
+            if (!HasRecentPitaco24Combo || !lastComboFrame.HasValidBpm)
+                return false;
+            bpm = lastComboFrame.Bpm;
+            return true;
+        }
+
         #endregion Events
 
         public bool IsConnected { get; private set; }
@@ -259,6 +283,7 @@ namespace Ibit.Core.Serial
             }
 
             IsConnected = false;
+            lastComboFrame = null;
 
 
         }
@@ -289,12 +314,30 @@ namespace Ibit.Core.Serial
             else if (string.Equals(message, SERIAL_DEVICE_DISCONNECTED))
             {
                 IsConnected = false;
+                lastComboFrame = null;
                 OnSerialDisconnected?.Invoke();
             }
             else
             {
                 if (!IsConnected)
                     return;
+
+                // A mesma COM aceita formato legado numerico e combo P24.
+                // Nunca repassar "P24,..." aos handlers que usam Parsers.Float().
+                if (message.StartsWith("P24,", StringComparison.Ordinal))
+                {
+                    Pitaco24ComboFrame sample;
+                    if (!Pitaco24ComboFrame.TryParse(message, out sample))
+                        return; // frame invalido nao deve virar fluxo nem BPM.
+
+                    lastComboFrame = sample;
+                    lastComboFrameReceivedAt = Time.realtimeSinceStartup;
+
+                    OnSerialMessageReceived?.Invoke(
+                        sample.RespiratoryValue.ToString("0.00", CultureInfo.InvariantCulture));
+                    OnPitaco24ComboReceived?.Invoke(sample);
+                    return;
+                }
 
                 OnSerialMessageReceived?.Invoke(message);
             }
