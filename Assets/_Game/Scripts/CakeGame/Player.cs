@@ -112,7 +112,7 @@ namespace Ibit.CakeGame
 
             }}}
 
-            if (sco.IsConnected) // Se Cinta conectada
+            if (sco != null && sco.IsConnected) // Oxímetro legado opcional
             {
                 FindObjectOfType<SerialControllerOximetro>().OnSerialMessageReceived += OnMessageReceivedOximetro;
 

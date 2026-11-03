@@ -18,7 +18,10 @@ namespace Ibit.Core.Util
             flowDataDevice = new FlowDataDevice {DeviceName = GameDevice.Oximetro.GetDescription()};
 
             sb.AppendLine("time;value");
-            FindObjectOfType<SerialControllerOximetro>().OnSerialMessageReceived += OnSerialMessageReceived;
+            // O modo combinado nao precisa de um SerialControllerOximetro separado.
+            var legacyOximeter = FindObjectOfType<SerialControllerOximetro>();
+            if (legacyOximeter != null)
+                legacyOximeter.OnSerialMessageReceived += OnSerialMessageReceived;
         }
 
         protected override void Save()

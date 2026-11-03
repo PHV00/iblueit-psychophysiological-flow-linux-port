@@ -86,7 +86,7 @@ namespace Ibit.WaterGame
                 }
             }
 
-            if (sco.IsConnected) // Se OXÍMETRO conectado
+            if (sco != null && sco.IsConnected) // Oxímetro legado opcional
             {
                 sco.OnSerialMessageReceived += OnMessageReceivedOximetro;
 

@@ -45,7 +45,9 @@ namespace Ibit.Core.Game
         {
             
 
-            if (scp.IsConnected || scm.IsConnected || scc.IsConnected) // Só executa caso algum dispositivo de controle esteja conectado
+            if ((scp != null && scp.IsConnected) ||
+                (scm != null && scm.IsConnected) ||
+                (scc != null && scc.IsConnected)) // Qualquer controle respiratório
             {
                 FusionManager(Player.sensorValuePitaco, Player.sensorValueMano, Player.sensorValueCinta, Player.sensorValueOxiSPO, Player.sensorValueOxiHR);
                 AdaptationGrid(Player.sensorValuePitaco, Player.sensorValueMano, Player.sensorValueCinta, Player.sensorValueOxiSPO, Player.sensorValueOxiHR);

@@ -34,7 +34,9 @@ namespace Ibit.Plataform
             scc.OnSerialMessageReceived += PositionOnSerialCinta;
             scc.OnSerialMessageReceived += AnimateCinta;
 
-            sco.OnSerialMessageReceived += PositionOnSerialOximetro;
+            // O antigo oxímetro é opcional no modo PITACO 2.4 Combo.
+            if (sco != null)
+                sco.OnSerialMessageReceived += PositionOnSerialOximetro;
 
             //DeepDDA: Ativar bloco de código para Treinamento do Agente
             //simulatedInput = FindObjectOfType<SimulatedInput>();

@@ -55,7 +55,7 @@ namespace Ibit.Core.Game
             //     return;
 
             //* AvaliationNode Oxímeter - DeepDDA: Monitoramento dos biosinais e feedback (Reward)
-            if (sco.IsConnected && Time.time > currenttimeOxi + timeBetweenSamplesOxi) // Executa a quantidade de leituras escolhida pelo usuário no arquivo "_signalTreatment.csv" por minuto.
+            if (sco != null && sco.IsConnected && Time.time > currenttimeOxi + timeBetweenSamplesOxi) // Executa a quantidade de leituras escolhida pelo usuário no arquivo "_signalTreatment.csv" por minuto.
             {
                 if (signalOxiSPO >= ParametersDb.parameters.MinimumRegularOxygenation && signalOxiSPO < ParametersDb.parameters.MinimumNormalOxygenation) // 85 até 94%    
                 {

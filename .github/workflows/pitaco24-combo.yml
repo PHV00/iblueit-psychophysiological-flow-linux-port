@@ -20,3 +20,5 @@ jobs:
           dotnet-version: '8.0.x'
       - name: Compilar e testar frame C# independente do Unity
         run: dotnet run --project Tests/Pitaco24ComboContract/Pitaco24ComboContract.csproj --configuration Release
+      - name: Verificar ligações entre receptor, minijogos e ML-Agents
+        run: python3 -m unittest discover -s Tests/Pitaco24ComboContract -p "test_*.py"
