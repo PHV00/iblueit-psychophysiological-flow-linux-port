@@ -184,8 +184,28 @@ namespace Ibit.Core.Serial
                     Thread.Sleep(arduinoOpenTime); // this is a fix to wait for arduino to open a connection :)
                     sp.Write("e");
 
-                    if (!sp.ReadLine().Contains("echop"))
-                        throw new TimeoutException("No response from device.");
+                    // O middleware pode ter amostras de pressao ou P24
+                    // ja em fila. A primeira linha nao precisa ser echop.
+                    var echoDeadline = DateTime.UtcNow.AddMilliseconds(
+                        Math.Max(1500, arduinoOpenTime));
+                    bool echoReceived = false;
+                    while (DateTime.UtcNow < echoDeadline)
+                    {
+                        try
+                        {
+                            if (sp.ReadLine().Contains("echop"))
+                            {
+                                echoReceived = true;
+                                break;
+                            }
+                        }
+                        catch (TimeoutException)
+                        {
+                            // Continuar aguardando dentro do limite total.
+                        }
+                    }
+                    if (!echoReceived)
+                        throw new TimeoutException("No echop from PITACO receiver.");
                 }
                 catch (Exception e)
                 {
