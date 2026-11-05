@@ -157,11 +157,46 @@ namespace Ibit.Core.Serial
                 try
                 {
                     sp.Open();
-                    Thread.Sleep(arduinoOpenTime); // this is a fix to wait for arduino to open a connection :)
+
+                    // Aguarda a inicialização do ESP32
+                    Thread.Sleep(arduinoOpenTime);
+
+                    // Descarta dados antigos da entrada serial
+                    sp.DiscardInBuffer();
+
+                    // Solicita a identificação do PITACO
                     sp.Write("e");
 
-                    if (!sp.ReadLine().Contains("echop"))
-                        throw new TimeoutException("No response from device.");
+                    bool identificado = false;
+                    DateTime limite = DateTime.UtcNow.AddSeconds(5);
+
+                    // Aguarda a resposta por até 5 segundos
+                    while (DateTime.UtcNow < limite)
+                    {
+                        try
+                        {
+                            string resposta = sp.ReadLine().Trim();
+
+                            Debug.Log($"[{port}] Recebido: '{resposta}'");
+
+                            if (resposta == "echop")
+                            {
+                                identificado = true;
+                                break;
+                            }
+                        }
+                        catch (TimeoutException)
+                        {
+                            // Continua tentando até atingir o limite
+                        }
+                    }
+
+                    if (!identificado)
+                    {
+                        throw new TimeoutException(
+                            "PITACO não respondeu ao comando de identificação."
+                        );
+                    }
                 }
                 catch (Exception e)
                 {
