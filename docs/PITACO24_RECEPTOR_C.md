@@ -24,8 +24,10 @@ ESP32-C3 (MPX5010DP + MAX30102)
 - O C abre a mesma COM fisica do firmware, sem par COM virtual e sem
   middleware Python, e mantem essa porta aberta **apos a identificacao**
   ate a desconexao, para reduzir corrida com A/B.
-- O receptor C se instancia antes das cenas via
-  `RuntimeInitializeOnLoadMethod(BeforeSceneLoad)`.
+- O receptor C deve ser **adicionado explicitamente a uma cena de teste**
+  ou criado pelo futuro seletor de dispositivos do jogo. Nao e criado
+  automaticamente nas cenas legadas A/B. Ao ser adicionado, tem prioridade
+  `DefaultExecutionOrder(-10000)`, antes de A/B na mesma cena.
 - O C envia `r` apos conectar; ao destruir, envia `f`.
 - Recebe JSON `sample` com RED/IR e `g1`; ignora as linhas numericas
   legadas de pressao no receptor (o parser/integrador recebera pressao
@@ -47,13 +49,17 @@ ESP32-C3 (MPX5010DP + MAX30102)
 4. Fechar a Bridge Python (a USB do ESP32 deve ficar livre). Abrir o fork
    Unity `PHV00/iblueit-psychophysiological-flow-pitaco2.4-port` na
    branch `feature/pitaco24-receptor-c-echo`.
-5. Iniciar Play numa cena comum. Observar no Console:
+5. Em uma cena de teste, criar um GameObject vazio com nome
+   `Pitaco24Receiver` e adicionar o componente
+   `SerialControllerPitaco24` pelo Inspector. Salvar a cena. O C nao
+   se instala automaticamente nas cenas do PITACO legado.
+6. Iniciar Play. Observar no Console:
    `[PITACO 2.4] echo2.4p reconhecido diretamente em COM...`.
-6. Aguardar aproximadamente 250 amostras de PPG (taxa nominal de ~25Hz)
+7. Aguardar aproximadamente 250 amostras de PPG (taxa nominal ~25Hz)
    e verificar a linha `[PITACO 2.4] JSON USB: 250 amostras...`.
-7. Desconectar/reconectar, conferir retorno da identificacao e observar
+8. Desconectar/reconectar, conferir retorno da identificacao e observar
    `lacunas` e `fila descartada`.
-8. **Teste de regressao separado:** fechar Unity e executar a Bridge
+9. **Teste de regressao separado:** fechar Unity e executar a Bridge
    Python antiga por BLE em `Somente monitor`, testando os dois
    graficos. Os arquivos BLE/Bridge nao foram modificados pelo PR de
    firmware novo.
@@ -61,8 +67,8 @@ ESP32-C3 (MPX5010DP + MAX30102)
 ## Limites e riscos
 
 - O C usa **USB fisica** nesta etapa, nao uma COM virtual e nao BLE.
-- A/B permanecem intocados. A inicializacao antecipada de C diminui
-  disputas de porta, mas o hot-plug concorrente de A e C requer ensaio.
+- A/B permanecem intocados. C tem prioridade de Awake caso esteja ativo
+  na cena; simultaneidade e hot-plug A/C ainda exigem ensaio.
 - Com varias portas COM, a sondagem leva ate o timeout configurado por
   porta; usa `i`, que dispositivos legados ignoram.
 - O limite de fila implica possivel descarte se o Unity atrasar. Os
