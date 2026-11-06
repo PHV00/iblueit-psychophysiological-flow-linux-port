@@ -13,20 +13,14 @@ using UnityEngine;
 
 namespace Ibit.Core.Serial
 {
+    // Ativar somente nas cenas que escolherem explicitamente PITACO 2.4.
+    // Iniciar antes dos receptores legados presentes na mesma cena evita
+    // competir pela porta USB fisica sem modificar o codigo dos legados.
+    [DefaultExecutionOrder(-10000)]
     public sealed class SerialControllerPitaco24 : MonoBehaviour
     {
         public const string EchoCommand = "i";
         public const string EchoResponse = "echo2.4p";
-
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
-        private static void Bootstrap()
-        {
-            if (FindObjectOfType<SerialControllerPitaco24>() != null)
-                return;
-            var go = new GameObject("PITACO 2.4 - Receptor C (USB)");
-            DontDestroyOnLoad(go);
-            go.AddComponent<SerialControllerPitaco24>();
-        }
 
         [SerializeField] private int baudRate = 115200;
         [SerializeField] private int identificationTimeoutMs = 3500;
