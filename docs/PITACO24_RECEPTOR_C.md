@@ -1,50 +1,76 @@
-# PITACO 2.4 — Etapa 1: receptor C (Unity)
+# PITACO 2.4 — Etapa 1: receptor C em USB direta no Unity
 
 ## Contrato de identificacao
 
-| Dispositivo | Comando enviado pela Unity | Resposta esperada |
+| Dispositivo | Comando enviado pelo Unity | Resposta esperada |
 |---|---|---|
-| PITACO 2.0 (receptor A, inalterado) | `e` | `echop` |
-| Oximetro independente (receptor B, inalterado) | `e` | `echox` |
-| PITACO 2.4 (novo receptor C) | `e` | `echo2.4p` |
+| PITACO original A (inalterado) | `e` | `echop` |
+| Oximetro independente B (inalterado) | `e` | `echox` |
+| PITACO 2.4 C (novo, USB direta) | `i` | `echo2.4p` |
 
-**Por que essa resposta?** Os controladores originais procuram `echop`/`echox` por substring. `echo2.4p` nao contem nenhuma delas e e comparada com igualdade exata pelo receptor C.
+**Importante:** `i` foi escolhido para nao mudar `e/echop` na
+Bridge Python e no BLE legado. Nao existe modo C na interface Python.
 
 ## Fluxo desta etapa
 
 ```
 ESP32-C3 (MPX5010DP + MAX30102)
-  -- JSON de amostras, por USB ou BLE --> Bridge Python
-  -- uma COM virtual, 115200 baud --> SerialControllerPitaco24.cs
-  -- evento OnJsonReceived(string) --> [proxima etapa: parser/integrador]
+   -- USB Serial fisica 115200 --> SerialControllerPitaco24.cs
+   -- JSON por linha (sample/g1) --> OnJsonReceived(string)
+   -- [proxima etapa] parser/integrador do jogo
 ```
 
-- A Bridge responde `echo2.4p\r\n` ao comando `e` **apenas** quando a opcao `PITACO 2.4 (JSON)` esta selecionada.
-- A Bridge **nao** encaminha esse `e` ao firmware, que ainda responde `echop` em sua serial fisica.
-- A Bridge envia quadros JSON `sample` e `g1` **integrais**, preservando `ppg.red`, `ppg.ir`, pressao, `seq`, `t_ms`, SQI e demais campos. Nao calcula SpO2 nem descarta o RAW para transmitir so BPM.
-- O receptor C se auto-instancia antes das cenas (`BeforeSceneLoad`), descobre a COM e reutiliza a thread serial existente, com fila propria de 512 mensagens e drenagem de ate 64 por frame, para nao usar a fila legada configurada com 1.
-- Ao receber a confirmacao de conexao da thread C, envia `r` (iniciar amostragem). Mantem os comandos `f` (parar) e demais comandos na bridge.
-- `OnJsonReceived` e o contrato de entrada para o futuro integrador. **Nesta etapa o C ainda nao alimenta os Players, UI, DeepDDA, banco nem calcula BPM/SpO2.**
-- A logica de pressao e os receptores A/B nao foram alterados. O novo objeto e global entre cenas e fica em `DontDestroyOnLoad`.
+- O firmware novo responde `echo2.4p\n` ao receber `i` **somente na USB**.
+- O C abre a mesma COM fisica do firmware, sem par COM virtual e sem
+  middleware Python, e mantem essa porta aberta **apos a identificacao**
+  ate a desconexao, para reduzir corrida com A/B.
+- O receptor C se instancia antes das cenas via
+  `RuntimeInitializeOnLoadMethod(BeforeSceneLoad)`.
+- O C envia `r` apos conectar; ao destruir, envia `f`.
+- Recebe JSON `sample` com RED/IR e `g1`; ignora as linhas numericas
+  legadas de pressao no receptor (o parser/integrador recebera pressao
+  do campo JSON `mpx5010dp.pressure_pa`).
+- Possui fila limitada configurada com 1024 linhas, drenagem por frame,
+  contador de amostras, G1, descartes da fila e descontinuidade de
+  `seq`. A cada 250 amostras, emite um resumo no Console.
+- **Nao** envia os valores ao jogo, ao oxímetro legado, ao ML-Agents,
+  ao banco de dados nem calcula SpO2. Essa e a proxima etapa.
 
-## Validacao manual — Windows, Unity 2022.3.4f1
+## Procedimento de teste (Windows)
 
-1. Na Bridge, selecionar `Saida ao jogo: PITACO 2.4 (JSON)`, selecionar USB/BLE e a COM virtual correspondente ao par com0com. Iniciar a Bridge **antes** da Unity.
-2. Abrir o Unity Editor com as dependencias ML-Agents locais corrigidas.
-3. Iniciar a cena `MainMenu` ou `Plataform` em Play. No Hierarchy, conferir `PITACO 2.4 - Receptor C`. No Console, conferir `[PITACO 2.4] Receptor C identificado em ...`.
-4. Com o ESP32 ativo, confirmar que a Bridge recebe o comando `r`. O evento C `OnJsonReceived` deve receber JSON `sample` e `g1`, inclusive `red`/`ir`. Inspecionar por breakpoint no Visual Studio/VS Code, **sem logar amostras continuamente**.
-5. Testar ausencia do dispositivo C e um PITACO 2.0/oximetro legado: o C nao deve reivindicar `echop` ou `echox`; A/B continuam funcionando.
-6. Desconectar/reconectar a Bridge e verificar retorno da conexao. Verificar a continuidade por `seq`, para detectar qualquer descarte de quadros.
+1. Atualizar a branch de firmware
+   `PHV00/PITACO_ESP32:feature/pitaco24-usb-identity-direct`.
+2. Compilar e gravar o sketch canonico `frimeware2.4` no ESP32-C3.
+3. Com o Unity e a Bridge fechados, abrir o Monitor Serial a 115200.
+   Enviar `i`, verificar `echo2.4p`; enviar `e`, verificar `echop`.
+   Fechar o Monitor Serial.
+4. Fechar a Bridge Python (a USB do ESP32 deve ficar livre). Abrir o fork
+   Unity `PHV00/iblueit-psychophysiological-flow-pitaco2.4-port` na
+   branch `feature/pitaco24-receptor-c-echo`.
+5. Iniciar Play numa cena comum. Observar no Console:
+   `[PITACO 2.4] echo2.4p reconhecido diretamente em COM...`.
+6. Aguardar aproximadamente 250 amostras de PPG (taxa nominal de ~25Hz)
+   e verificar a linha `[PITACO 2.4] JSON USB: 250 amostras...`.
+7. Desconectar/reconectar, conferir retorno da identificacao e observar
+   `lacunas` e `fila descartada`.
+8. **Teste de regressao separado:** fechar Unity e executar a Bridge
+   Python antiga por BLE em `Somente monitor`, testando os dois
+   graficos. Os arquivos BLE/Bridge nao foram modificados pelo PR de
+   firmware novo.
 
-## Limites desta entrega
+## Limites e riscos
 
-- Ainda nao existe parser de medidas fisiologicas, roteamento da pressao ao legado, processamento de RAW RED/IR, SQI no Unity, interface grafica, integracao com DeepDDA nem persistencia.
-- Reutilizamos `SerialThreadPitaco` para aquisicao: ha uma **fila limitada**; se a Unity ficar travada e ela encher, podera ocorrer descarte. Na proxima fase, validar por `seq` e considerar bufferizacao/estrategia de perda explicita.
-- O firmware continua retornando `echop` na USB fisica; `echo2.4p` e uma **identidade da bridge diante do Unity**, independente de USB/BLE.
-- Dois receptores ainda podem sondar COMs durante reconexao. A inicializacao antecipada do C reduz a disputa, mas nao prova exclusao total. Testar todas as combinacoes A/B/C nas cenas.
-- O PR anterior de modo `P24` resumido (BPM, sem RAW) **nao deve ser aplicado junto sem reconciliar o contrato**; este plano C usa JSON integral.
+- O C usa **USB fisica** nesta etapa, nao uma COM virtual e nao BLE.
+- A/B permanecem intocados. A inicializacao antecipada de C diminui
+  disputas de porta, mas o hot-plug concorrente de A e C requer ensaio.
+- Com varias portas COM, a sondagem leva ate o timeout configurado por
+  porta; usa `i`, que dispositivos legados ignoram.
+- O limite de fila implica possivel descarte se o Unity atrasar. Os
+  contadores mostram perdas; o futuro SQI deve considera-las.
+- O firmware continua enviando pressao numerica + JSON simultaneamente.
+- Nao houve compilacao do editor Unity nem validacao fisica automatica.
 
 ## Referencias
 
-- [Bridge PITACO](https://github.com/PHV00/PITACO_ESP32)
-- [I Blue It PITACO 2.4](https://github.com/PHV00/iblueit-psychophysiological-flow-pitaco2.4-port)
+- [Firmware PITACO 2.4](https://github.com/PHV00/PITACO_ESP32)
+- [Fork I Blue It PITACO 2.4](https://github.com/PHV00/iblueit-psychophysiological-flow-pitaco2.4-port)
