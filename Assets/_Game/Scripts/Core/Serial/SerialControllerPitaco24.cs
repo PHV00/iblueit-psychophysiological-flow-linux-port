@@ -272,7 +272,9 @@ namespace Ibit.Core.Serial
                     line = pending.Dequeue();
                 }
 
-                if (line.Length > 1024)
+                // O firmware mantem a pressao numerica legada a 20 Hz.
+                // Ignorar sem gerar excecao JSON em cada amostra numerica.
+                if (line.Length == 0 || line.Length > 1024 || line[0] != '{')
                     continue;
 
                 try
