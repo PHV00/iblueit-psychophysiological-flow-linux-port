@@ -96,29 +96,9 @@ namespace Ibit.MainMenu.UI
 
 #endif
 
-            if (stage == null)
-            {
-                SysMessage.Warning("Fase indisponivel. Verifique a configuracao do StageDb.");
-                return;
-            }
-
-            // Com parametros remotos, preserva o comportamento do DeepDDA.
-            // Sem retorno da API, usa apenas a fase ja configurada no projeto.
-            // Clona o ScriptableObject para nao alterar o asset no Editor.
-            if (FillStageList.stageDto != null)
-            {
-                StageModel.Loaded = stage;
-                MapStageFromDto(FillStageList.stageDto);
-            }
-            else
-            {
-                StageModel.Loaded = Instantiate(stage);
-                StageModel.Loaded.IdApi = null; // Nao reaproveitar ID remoto armazenado no asset.
-                StageModel.Loaded.PacientIdApi = Pacient.Loaded.IdApi;
-                Debug.LogWarning("[Fases/DeepDDA] Executando fase local de teste (" +
-                                 stage.Phase + "/" + stage.Level +
-                                 "), sem parametros remotos para este paciente.");
-            }
+            StageModel.Loaded = stage;
+            // DeepDDA: Gameparameters
+            MapStageFromDto(FillStageList.stageDto);
             FindObjectOfType<SceneLoader>().LoadScene(1);
             //Debug.Log($"Stage {stage.Id} loaded.");
         }

@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections;
+﻿using System.Collections;
 using System.Linq;
 using Ibit.Core.Data;
 using Ibit.Core.Database;
@@ -17,78 +16,38 @@ namespace Ibit.MainMenu.UI
         [SerializeField] private Scrollbar scrollbar;
         public static StageDto stageDto;
         private bool _populated;
-        private bool _loading;
 
         private void OnEnable()
         {
-            if (_populated || _loading)
-                return;
-
-            if (stageDb == null || stageDb.StageList == null || stageDb.StageList.Length == 0)
+            if (!_populated)
             {
-                Debug.LogError("[Fases] StageDb sem fases configuradas. Verifique o StageDb da cena.");
-                return;
+                // Certifica-se de que StageDb está instanciado e StageList está pronta
+                if (stageDb.StageList != null)
+                {
+                    PopulateStageList();
+                    _populated = true;
+                }
+                else
+                {
+                    Debug.LogError("StageDb.StageList não está pronta ou é null.");
+                }
             }
-
-            PopulateStageList();
         }
 
         private async void PopulateStageList()
         {
-            _loading = true;
-            stageDto = null; // Nunca reutilizar parametros remotos de outro paciente/sessao.
-            try
-            {
-                if (Pacient.Loaded == null)
-                {
-                    Debug.LogError("[Fases] Nenhum paciente carregado. Carregue um perfil primeiro.");
-                    return;
-                }
-
-                // A API pode responder com Data vazio, null, erro ou indisponibilidade.
-                // Isso nao deve impedir que o menu apresente os modelos locais de fase.
-                try
-                {
-                    var response = await DataManager.Instance.GetGameparameter(Pacient.Loaded.IdApi);
-                    if (response != null && response.Success && response.Data != null)
-                        stageDto = response.Data.FirstOrDefault(x => x != null);
-
-                    if (stageDto == null)
-                    {
-                        string reason = response == null ? "resposta nula" :
-                            "success=" + response.Success +
-                            ", itens=" + (response.Data != null ? response.Data.Count.ToString() : "null") +
-                            ", mensagem=" + (response.Message ?? "(sem mensagem)");
-                        Debug.LogWarning("[Fases/DeepDDA] Parametros remotos indisponiveis (" +
-                                         reason + "). Usando fases locais do StageDb para teste; " +
-                                         "nenhum parametro remoto sera inventado.");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogWarning("[Fases/DeepDDA] Falha na consulta de parametros: " +
-                                     ex.Message + ". Usando fases locais do StageDb para teste.");
-                }
-
-                // A resposta da API pode chegar depois de trocar de tela/cena.
-                if (this == null)
-                    return;
-
+            // DeepDDA: Gameparameters
+            var gameparameterResponse = await DataManager.Instance.GetGameparameter(Pacient.Loaded.IdApi);
+            stageDto = gameparameterResponse.Data[0];
             
             foreach (var stage in stageDb.StageList)
             {
-                if (stage == null)
-                {
-                    Debug.LogWarning("[Fases] Entrada nula no StageDb ignorada.");
-                    continue;
-                }
-
                 var item = Instantiate(buttonPrefab);
                 item.transform.SetParent(this.transform);
                 item.transform.localScale = Vector3.one;
                 item.name = $"ITEM_F{stage.Phase}_L{stage.Level}";
                 item.AddComponent<StageLoader>().stage = stage;
-                if(stageDto != null && stageDto.Phase == stage.Phase){
+                if(stageDto.Phase == stage.Phase){
                     item.GetComponentInChildren<Text>().text = $"Fase: {stageDto.Phase} - Nível: {stageDto.Level}";
                 }
                 else{
@@ -98,17 +57,7 @@ namespace Ibit.MainMenu.UI
                 item.GetComponent<Button>().interactable = Pacient.Loaded.UnlockedLevels >= stage.Id;
             }
 
-                _populated = true;
-                StartCoroutine(AdjustGrip());
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError("[Fases] Falha ao preencher lista de fases: " + ex);
-            }
-            finally
-            {
-                _loading = false;
-            }
+            StartCoroutine(AdjustGrip());
         }
 
         //DeepDDA: alterado StageDb.Instance.StageList
