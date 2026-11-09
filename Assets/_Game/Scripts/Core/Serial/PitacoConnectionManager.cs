@@ -126,7 +126,10 @@ namespace Ibit.Core.Serial
 
         private void Update()
         {
-            BindControllers();
+            // Objetos de cena ja sao vinculados em sceneLoaded. Verificacao
+            // eventual cobre instanciacao dinamica sem buscar a cada frame.
+            if (Time.frameCount % 60 == 0)
+                BindControllers();
             int count = Math.Max(1, maxLinesPerFrame);
             for (int i = 0; i < count; ++i)
             {
@@ -248,6 +251,7 @@ namespace Ibit.Core.Serial
 
         private void ScanAndRead()
         {
+            bool warnedNoDevice = false;
             while (!stopRequested)
             {
                 string[] ports;
@@ -331,6 +335,13 @@ namespace Ibit.Core.Serial
                     if (hadConnection) break;
                 }
 
+                if (!hadConnection && !warnedNoDevice && !stopRequested)
+                {
+                    Push(PacketKind.Warning, Version.None,
+                         "Nenhum PITACO identificado. Verifique a COM e o firmware; nova busca automatica.");
+                    warnedNoDevice = true;
+                }
+                if (hadConnection) warnedNoDevice = false;
                 if (!stopRequested)
                     Thread.Sleep(Math.Max(500, scanRetryMs));
             }
