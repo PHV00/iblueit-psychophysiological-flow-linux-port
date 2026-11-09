@@ -233,20 +233,16 @@ namespace Ibit.Core.Serial
             return false;
         }
 
-        private Version Identify(SerialPort port)
+        // Cada fase testa UM protocolo em todas as portas; fallback so
+        // acontece depois de esgotar a descoberta global do PITACO 2.4.
+        private bool Identify(SerialPort port, Version version)
         {
             Thread.Sleep(Math.Max(0, arduinoOpenTimeMs));
-            if (stopRequested) return Version.None;
+            if (stopRequested) return false;
             port.DiscardInBuffer();
-            port.Write("i");
-            if (WaitFor(port, "echo2.4p", handshakeTimeoutMs))
-                return Version.Pitaco24;
-
-            if (stopRequested) return Version.None;
-            port.Write("e");
-            if (WaitFor(port, "echop", handshakeTimeoutMs))
-                return Version.Pitaco20;
-            return Version.None;
+            bool is24 = version == Version.Pitaco24;
+            port.Write(is24 ? "i" : "e");
+            return WaitFor(port, is24 ? "echo2.4p" : "echop", handshakeTimeoutMs);
         }
 
         private void ScanAndRead()
@@ -266,12 +262,27 @@ namespace Ibit.Core.Serial
                 if (!string.IsNullOrEmpty(preferredPort))
                     ports = new[] { preferredPort.Trim() };
 
-                bool hadConnection = false;
-                foreach (string portName in ports)
+                // Prioriza a COM fisica no exame inicial; CNCB/CNCA
+                // permanecem disponiveis para compatibilidade com com0com.
+                Array.Sort(ports, (a, b) =>
                 {
+                    bool aVirtual = a.StartsWith("CNC", StringComparison.OrdinalIgnoreCase);
+                    bool bVirtual = b.StartsWith("CNC", StringComparison.OrdinalIgnoreCase);
+                    if (aVirtual != bVirtual) return aVirtual ? 1 : -1;
+                    return StringComparer.OrdinalIgnoreCase.Compare(a, b);
+                });
+
+                bool hadConnection = false;
+                // Fase 1: todas as COMs com i/echo2.4p.
+                // Fase 2: somente se nao ha 2.4, todas com e/echop.
+                for (int phase = 0; phase < 2 && !stopRequested && !hadConnection; phase++)
+                {
+                    Version target = phase == 0 ? Version.Pitaco24 : Version.Pitaco20;
+                    foreach (string portName in ports)
+                    {
                     if (stopRequested) break;
                     bool connected = false;
-                    Version found = Version.None;
+                    Version found = target;
                     try
                     {
                         using (var port = new SerialPort(portName, baudRate))
@@ -283,12 +294,15 @@ namespace Ibit.Core.Serial
                             port.Handshake = Handshake.None;
                             port.NewLine = "\n";
                             port.Open();
-                            found = Identify(port);
-                            if (found == Version.None) continue;
+                            if (!Identify(port, found)) continue;
 
                             connected = true;
                             hadConnection = true;
                             Push(PacketKind.Connected, found, portName);
+                            if (found == Version.Pitaco20)
+                                Push(PacketKind.Warning, found,
+                                     "Fallback PITACO 2.0 em " + portName +
+                                     ": nenhuma COM respondeu echo2.4p.");
                             try
                             {
                                 while (!stopRequested)
@@ -333,6 +347,7 @@ namespace Ibit.Core.Serial
                         }
                     }
                     if (hadConnection) break;
+                    }
                 }
 
                 if (!hadConnection && !warnedNoDevice && !stopRequested)
