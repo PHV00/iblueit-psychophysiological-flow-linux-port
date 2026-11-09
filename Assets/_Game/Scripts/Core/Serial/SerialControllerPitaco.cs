@@ -96,10 +96,38 @@ namespace Ibit.Core.Serial
 
         public bool IsConnected { get; private set; }
 
-        public string ReadSerialMessage() => serialThread.ReadSerialMessage();
+        public string ReadSerialMessage() => serialThread != null ? serialThread.ReadSerialMessage() : null;
+
+// Entrada gerenciada: a conexao fisica pertence ao PitacoConnectionManager.
+internal void ManagedConnected()
+{
+    if (IsConnected) return;
+    IsConnected = true;
+    OnSerialConnected?.Invoke();
+    StartSampling();
+}
+
+internal void ManagedDisconnected()
+{
+    if (!IsConnected) return;
+    IsConnected = false;
+    OnSerialDisconnected?.Invoke();
+}
+
+internal void ManagedLine(string line)
+{
+    if (IsConnected)
+        OnSerialMessageReceived?.Invoke(line);
+}
 
         public void SendSerialMessage(string message)
         {
+            if (PitacoConnectionManager.Active != null)
+            {
+                if (IsConnected)
+                    PitacoConnectionManager.Active.SendToLegacy(message);
+                return;
+            }
 
 //#if UNITY_EDITOR
 
@@ -115,7 +143,8 @@ namespace Ibit.Core.Serial
             if (!IsConnected)
                 return;
 
-            serialThread.SendSerialMessage(message);
+            if (serialThread != null)
+                serialThread.SendSerialMessage(message);
         }
 
         public void SetTearDownFunction(TearDownFunction userFunction) => this.userDefinedTearDownFunction = userFunction;
@@ -182,11 +211,14 @@ namespace Ibit.Core.Serial
 
         private void Awake()
         {
-            Connect();
+            if (PitacoConnectionManager.Active == null)
+                Connect();
         }
 
         public void Connect()
         {
+            if (PitacoConnectionManager.Active != null)
+                return; // Uma unica descoberta/COM gerenciada.
 //#if UNITY_EDITOR
 //            if (testPitacoConnection)
 //            {
@@ -226,6 +258,12 @@ namespace Ibit.Core.Serial
 
         private void Disconnect()
         {
+            if (PitacoConnectionManager.Active != null)
+            {
+                // Trocar de cena nao pode encerrar a sessao fisica compartilhada.
+                ManagedDisconnected();
+                return;
+            }
 //#if UNITY_EDITOR
 //            if (testPitacoConnection)
 //            {
@@ -267,6 +305,8 @@ namespace Ibit.Core.Serial
 
         private void Update()
         {
+            if (PitacoConnectionManager.Active != null)
+                return; // O manager entrega linhas e eventos no thread principal.
 //#if UNITY_EDITOR
 //            if (testPitacoConnection && stopReceivePicatoValues == false)
 //            {

@@ -59,7 +59,8 @@ namespace Ibit.Core.Serial
 
         private void Awake()
         {
-            Connect();
+            if (PitacoConnectionManager.Active == null)
+                Connect();
         }
 
         // Mesmo criterio do controlador original para descobrir portas.
@@ -141,6 +142,8 @@ namespace Ibit.Core.Serial
 
         public void Connect()
         {
+            if (PitacoConnectionManager.Active != null)
+                return;
             if (serialThread != null)
                 return;
 
@@ -175,14 +178,54 @@ namespace Ibit.Core.Serial
 
         public void SendSerialMessage(string message)
         {
-            if (!IsConnected || serialThread == null || string.IsNullOrEmpty(message))
+            if (!IsConnected || string.IsNullOrEmpty(message))
                 return;
 
-            serialThread.SendSerialMessage(message);
+            if (PitacoConnectionManager.Active != null)
+            {
+                PitacoConnectionManager.Active.SendToPitaco24(message);
+                return;
+            }
+            if (serialThread != null)
+                serialThread.SendSerialMessage(message);
+        }
+
+        internal void ManagedConnected()
+        {
+            if (IsConnected) return;
+            IsConnected = true;
+            Debug.Log("[PITACO 2.4] Porta serial ativa (manager).");
+            OnSerialConnected?.Invoke();
+            if (startSamplingOnConnect)
+                StartSampling();
+        }
+
+        internal void ManagedDisconnected()
+        {
+            if (!IsConnected) return;
+            IsConnected = false;
+            OnSerialDisconnected?.Invoke();
+        }
+
+        internal void ManagedLine(string message)
+        {
+            if (!IsConnected || string.IsNullOrEmpty(message)) return;
+            OnSerialMessageReceived?.Invoke(message);
+            string line = message.Trim();
+            if (!line.StartsWith("{", StringComparison.Ordinal) ||
+                !line.EndsWith("}", StringComparison.Ordinal))
+                return;
+            JsonMessagesReceived++;
+            OnJsonReceived?.Invoke(line);
+            if (logEveryNJsonMessages > 0 && JsonMessagesReceived % logEveryNJsonMessages == 0)
+                Debug.Log("[PITACO 2.4] JSON: " + JsonMessagesReceived +
+                          " | descartes da fila: " + PitacoConnectionManager.Active.DroppedLines);
         }
 
         private void Update()
         {
+            if (PitacoConnectionManager.Active != null)
+                return;
             if (serialThread == null)
                 return;
 
@@ -243,6 +286,11 @@ namespace Ibit.Core.Serial
 
         private void OnDestroy()
         {
+            if (PitacoConnectionManager.Active != null)
+            {
+                ManagedDisconnected();
+                return; // A COM permanece aberta na troca de cena.
+            }
             if (reconnectCoroutine != null)
             {
                 StopCoroutine(reconnectCoroutine);
