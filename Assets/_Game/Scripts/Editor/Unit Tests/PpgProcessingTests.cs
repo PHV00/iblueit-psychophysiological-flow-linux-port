@@ -1,0 +1,101 @@
+using System;
+using System.Collections.Generic;
+using Ibit.Core.Oximetry;
+using NUnit.Framework;
+
+public class PpgProcessingTests
+{
+    private static List<PpgSample> MakeWave(double bpm, bool fifoBatched = false)
+    {
+        var data = new List<PpgSample>();
+        for (int i = 0; i < 210; i++)
+        {
+            double t = i * 0.040;
+            double wave = Math.Sin(2.0 * Math.PI * bpm * t / 60.0);
+            int red = (int)Math.Round(60000.0 + 500.0 * wave);
+            int ir = (int)Math.Round(80000.0 + 1000.0 * wave);
+            uint timeMs = fifoBatched ? (uint)((i / 4) * 160) : (uint)(i * 40);
+            data.Add(new PpgSample((ushort)i, timeMs, red, ir));
+        }
+        return data;
+    }
+
+    [Test]
+    public void KnownSynthetic75BpmIsRecoveredAndRatioHasExpectedDemo()
+    {
+        var source = MakeWave(75);
+        PpgProcessedWindow processed;
+        string reason;
+        Assert.IsTrue(PpgSignalProcessor.TryProcess(source, out processed, out reason), reason);
+        double bpm, correlation;
+        Assert.IsTrue(BpmEstimator.TryEstimate(processed, out bpm, out correlation));
+        Assert.AreEqual(75.0, bpm, 2.0);
+        Assert.Greater(correlation, 0.57);
+
+        double spo2Demo, ratio;
+        Assert.IsTrue(Spo2Estimator.TryEstimateDemo(processed, out spo2Demo, out ratio));
+        Assert.AreEqual(2.0 / 3.0, ratio, 0.04);
+        Assert.That(spo2Demo, Is.InRange(94.0, 96.5));
+    }
+
+    [Test]
+    public void RepeatedFifoReadTimestampsDoNotInvalidateSequentialSamples()
+    {
+        PpgProcessedWindow processed;
+        string reason;
+        Assert.IsTrue(PpgSignalProcessor.TryProcess(MakeWave(75, true),
+            out processed, out reason), reason);
+        double bpm, correlation;
+        Assert.IsTrue(BpmEstimator.TryEstimate(processed, out bpm, out correlation));
+        Assert.AreEqual(75.0, bpm, 3.0);
+    }
+
+    [Test]
+    public void ConstantOpticalSignalProducesNeitherBpmNorDemoSpo2()
+    {
+        var source = new List<PpgSample>();
+        for (int i = 0; i < 210; i++)
+            source.Add(new PpgSample((ushort)i, (uint)(i * 40), 60000, 80000));
+
+        PpgProcessedWindow processed;
+        string reason;
+        Assert.IsTrue(PpgSignalProcessor.TryProcess(source, out processed, out reason), reason);
+        double bpm, correlation, spo2Demo, ratio;
+        Assert.IsFalse(BpmEstimator.TryEstimate(processed, out bpm, out correlation));
+        Assert.IsFalse(Spo2Estimator.TryEstimateDemo(processed, out spo2Demo, out ratio));
+    }
+
+    [Test]
+    public void SequenceGapRestartsTheBuffer()
+    {
+        var buffer = new PpgSampleBuffer();
+        Assert.IsTrue(buffer.Add(new PpgSample(1, 0, 50000, 60000)));
+        Assert.IsTrue(buffer.Add(new PpgSample(2, 40, 50000, 60000)));
+        Assert.IsFalse(buffer.Add(new PpgSample(4, 80, 50000, 60000)));
+        Assert.AreEqual(1, buffer.Count);
+    }
+
+    [Test]
+    public void CounterWraparoundDoesNotCauseAFalseGap()
+    {
+        var buffer = new PpgSampleBuffer();
+        Assert.IsTrue(buffer.Add(new PpgSample(65535, uint.MaxValue - 20, 50000, 60000)));
+        Assert.IsTrue(buffer.Add(new PpgSample(0, 20, 50000, 60000)));
+        Assert.AreEqual(2, buffer.Count);
+    }
+
+    [Test]
+    public void MissingDcOrInsufficientSamplesDoesNotGenerateOutput()
+    {
+        var insufficient = new List<PpgSample> { new PpgSample(0, 100, 0, 0) };
+        PpgProcessedWindow processed;
+        string reason;
+        Assert.IsFalse(PpgSignalProcessor.TryProcess(insufficient, out processed, out reason));
+        Assert.IsNull(processed);
+
+        var data = new List<PpgSample>();
+        for (int i = 0; i < 210; i++)
+            data.Add(new PpgSample((ushort)i, (uint)(i * 40), 0, 80000));
+        Assert.IsFalse(PpgSignalProcessor.TryProcess(data, out processed, out reason));
+    }
+}
