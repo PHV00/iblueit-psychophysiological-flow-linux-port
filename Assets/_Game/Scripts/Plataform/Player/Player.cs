@@ -46,6 +46,9 @@ namespace Ibit.Plataform
 
         private void Update()
         {
+            // The existing Player owns oximetry presentation in every game scene.
+            // PPG estimates come from the persistent coordinator, not a second COM.
+            UpdatePitaco24Oximetry();
 #if UNITY_EDITOR
             Move();
 #endif

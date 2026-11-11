@@ -64,7 +64,6 @@ namespace Ibit.Core.Serial
             // The modern serial controller forwards data; it does NOT open another COM.
             go.AddComponent<SerialControllerPitaco24>();
             go.AddComponent<PpgProcessingCoordinator>();
-            go.AddComponent<OximetryIntegrationHub>();
         }
 
         private void Awake()

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Ibit.Core.Oximetry;
+using Ibit.Plataform;
 using NUnit.Framework;
 
 public class PpgProcessingTests
@@ -112,32 +113,26 @@ public class PpgProcessingTests
     }
 
     [Test]
-    public void HudFormatterMarksDemoAndKeepsTwoSeparateValues()
+    public void PlayerFormatsBothOpticalValuesAsExperimental()
     {
-        var reading = new OximetryReading(8000, DateTime.UtcNow, 75.1,
-            95.0, 0.667, 25.0, 0.8, "EXPERIMENTAL - NAO CALIBRADO");
-        var text = OximetryHudFormatter.Format(reading);
-        StringAssert.Contains("75.1 bpm", text);
+        var text = Player.FormatPitaco24Oximetry(75.1, 95.0);
+        StringAssert.Contains("HR [2.4]: 75.1 bpm", text);
         StringAssert.Contains("SpO2 DEMO: 95.0 %", text);
         StringAssert.DoesNotContain("75.1,95.0", text);
     }
 
     [Test]
-    public void HudFormatterDoesNotRepresentMissingValuesAsZero()
+    public void PlayerFormatsMissingOpticalValuesAsDashes()
     {
-        var missing = new OximetryReading(0, DateTime.UtcNow, null,
-            null, null, 0, 0, "Sem contato optico");
-        var text = OximetryHudFormatter.Format(missing);
-        StringAssert.Contains("sem contato", text);
-        StringAssert.Contains("HR: -- | SpO2 DEMO: --", text);
+        var text = Player.FormatPitaco24Oximetry(null, null);
+        StringAssert.Contains("HR [2.4]: -- bpm", text);
+        StringAssert.Contains("SpO2 DEMO: -- %", text);
     }
 
     [Test]
-    public void HudFormatterPreservesBpmWhenDemoSpo2Unavailable()
+    public void PlayerPreservesBpmWhenDemoSpo2Unavailable()
     {
-        var partial = new OximetryReading(8000, DateTime.UtcNow, 75,
-            null, null, 25, 0.75, "EXPERIMENTAL - NAO CALIBRADO");
-        var text = OximetryHudFormatter.Format(partial);
+        var text = Player.FormatPitaco24Oximetry(75, null);
         StringAssert.Contains("75.0 bpm", text);
         StringAssert.Contains("SpO2 DEMO: -- %", text);
     }
