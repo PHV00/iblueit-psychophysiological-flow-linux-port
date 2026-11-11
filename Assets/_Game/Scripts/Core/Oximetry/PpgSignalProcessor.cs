@@ -33,13 +33,14 @@ namespace Ibit.Core.Oximetry
     public static class PpgSignalProcessor
     {
         public const int MinimumSamples = 70;
-        public const uint MinimumWindowMs = 3000;
+        // Require a complete window before producing any BPM/SpO2 estimate.
+        public const uint MinimumWindowMs = PpgSampleBuffer.WindowMs;
 
         public static bool TryProcess(IReadOnlyList<PpgSample> samples,
             out PpgProcessedWindow result, out string reason)
         {
             result = null;
-            reason = "Waiting for at least 70 samples and 3 seconds";
+            reason = "Waiting for a full 8-second PPG window";
             if (samples == null || samples.Count < MinimumSamples)
                 return false;
 

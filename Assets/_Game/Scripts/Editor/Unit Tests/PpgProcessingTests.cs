@@ -66,6 +66,52 @@ public class PpgProcessingTests
     }
 
     [Test]
+    public void BeforeEightSecondsNoEstimateIsProduced()
+    {
+        var source = MakeWave(75);
+        // 200 samples at 25 Hz span only 7960 ms: not a full 8-second window.
+        source.RemoveRange(200, source.Count - 200);
+        PpgProcessedWindow processed;
+        string reason;
+        Assert.IsFalse(PpgSignalProcessor.TryProcess(source, out processed, out reason));
+        Assert.IsNull(processed);
+    }
+
+    [Test]
+    public void AtEightSecondsEstimationBecomesAvailable()
+    {
+        var source = MakeWave(75);
+        source.RemoveRange(201, source.Count - 201); // 201 samples, 0..8000 ms.
+        PpgProcessedWindow processed;
+        string reason;
+        Assert.IsTrue(PpgSignalProcessor.TryProcess(source, out processed, out reason), reason);
+        double bpm, correlation;
+        Assert.IsTrue(BpmEstimator.TryEstimate(processed, out bpm, out correlation));
+        Assert.AreEqual(75.0, bpm, 3.0);
+    }
+
+    [Test]
+    public void IrregularFortyOneMsReadsStillPermitFullEightSecondWindow()
+    {
+        var buffer = new PpgSampleBuffer();
+        // An exact 8000-ms timestamp is never present at a 41-ms cadence.
+        // The buffer must retain enough margin for the full window to exist.
+        for (int i = 0; i < 210; i++)
+        {
+            double phase = 2.0 * Math.PI * 75.0 * (i * 0.041) / 60.0;
+            int ir = (int)Math.Round(80000.0 + 1000.0 * Math.Sin(phase));
+            buffer.Add(new PpgSample((ushort)i, (uint)(i * 41), 60000, ir));
+        }
+        PpgProcessedWindow processed;
+        string reason;
+        Assert.IsTrue(PpgSignalProcessor.TryProcess(buffer.Samples, out processed, out reason),
+            reason);
+        Assert.GreaterOrEqual(
+            unchecked(buffer.Samples[buffer.Count - 1].TimeMs - buffer.Samples[0].TimeMs),
+            PpgSampleBuffer.WindowMs);
+    }
+
+    [Test]
     public void SequenceGapRestartsTheBuffer()
     {
         var buffer = new PpgSampleBuffer();

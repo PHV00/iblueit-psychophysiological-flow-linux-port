@@ -41,7 +41,7 @@ Testes NUnit: `Assets/_Game/Scripts/Editor/Unit Tests/PpgProcessingTests.cs`.
    necessário, arraste o `SerialControllerPitaco24` ao campo homônimo.
 4. Conecte o PITACO 2.4 normalmente. O componente **apenas observa** os
    JSONs, sem abrir outra COM e sem enviar comandos ao hardware.
-5. Após reunir amostras (mínimo 70 e 3 s), veja logs
+5. Após acumular **ao menos 8 segundos de RED/IR contínuos** (tipicamente ~200 amostras), veja logs
    `[PPG C# experimental]` no Console a cada ~5 s. `--` = indisponível.
 6. Em `Window > General > Test Runner > EditMode`, execute
    `PpgProcessingTests`. Testes sintéticos não comprovam precisão real.
@@ -55,14 +55,22 @@ quando formos planejar sua integração e ciclo de vida.
 
 - Fonte: JSON `{"type":"sample","seq":123,"t_ms":4567,"ppg":{"red":60000,"ir":80000}}`.
   `g1`, `sqi`, `bpm` e `bpm_valid` não participam da estimativa.
-- Janela móvel: 8 s, no máximo 256 amostras; após ~3 s e 70 amostras pode
-  ser produzida a primeira estimativa. Recalcular a cada >=400 ms.
+- Janela móvel: **8 s completos antes da primeira estimativa**, até 256 amostras.
+  O buffer retém até 200 ms adicionais para tolerar timestamps agrupados/irregulares
+  da FIFO; a estimativa usa aproximadamente 8,0–8,2 s de dados.
+  Recalcular a cada >=400 ms após a primeira janela válida.
+  O limiar adicional de 70 amostras continua como proteção básica, mas
+  não substitui o requisito de 8 segundos.
 - `t_ms` registra a **leitura da FIFO**, não o instante da conversão.
   Várias amostras com `seq` consecutivo podem ter o mesmo timestamp.
   Por isso, `fs` usa (N-1)/duração efetiva da janela, **não mediana**
   dos intervalos entre registros, que seria zero em rajadas.
 - Aceitar fs efetivo entre 20 e 30 Hz, coerente com a configuração
   nominal 100 Hz com média FIFO 4 (~25 pares RED/IR/s).
+- Preservar `Config/_signalTreatment.csv` com `O;10` (10 leituras/min
+  = intervalo de 6 s): **cadência de consumo do oxímetro legado**, sem
+  reduzir as ~25 amostras RED/IR por segundo e sem conectar o novo resultado
+  ao Player/Mixer/DeepDDA nesta etapa.
 - Reiniciar janela após quebra de `seq`, intervalo de leitura da FIFO
   superior a 750 ms, desconexão ou ausência prolongada de amostras.
 - Remover componente lenta por média móvel (~1 s de largura total) e

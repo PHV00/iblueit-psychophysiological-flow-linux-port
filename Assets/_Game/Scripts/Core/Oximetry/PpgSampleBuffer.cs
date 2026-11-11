@@ -3,12 +3,15 @@ using System.Collections.Generic;
 namespace Ibit.Core.Oximetry
 {
     /// <summary>
-    /// Bounded 8-second raw window. Timestamp is the FIFO read time, not ADC conversion
-    /// time: equal timestamps are permitted if sequence numbers are contiguous.
+    /// Rolling raw PPG window of at least 8 seconds. Timestamp is the FIFO read time,
+    /// not ADC conversion time: equal timestamps are allowed for contiguous sequences.
+    /// A small retention margin avoids permanently missing an exact 8000-ms span
+    /// when FIFO read timestamps are irregular or grouped.
     /// </summary>
     public sealed class PpgSampleBuffer
     {
         public const uint WindowMs = 8000;
+        private const uint RetentionMarginMs = 200;
         private const uint MaxReadGapMs = 750;
         private readonly List<PpgSample> samples = new List<PpgSample>(256);
         public IReadOnlyList<PpgSample> Samples { get { return samples; } }
@@ -34,7 +37,7 @@ namespace Ibit.Core.Oximetry
 
             samples.Add(sample);
             while (samples.Count > 0 &&
-                   unchecked(sample.TimeMs - samples[0].TimeMs) > WindowMs)
+                   unchecked(sample.TimeMs - samples[0].TimeMs) > WindowMs + RetentionMarginMs)
                 samples.RemoveAt(0);
 
             // Defensive bound if several FIFO samples share the same timestamp.
