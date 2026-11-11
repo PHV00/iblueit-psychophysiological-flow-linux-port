@@ -23,11 +23,13 @@ namespace Ibit.MainMenu.UI
 
         private void FixedUpdate()
         {
-            // O controlador legado tambem fornece eventos respiratorios para o
-            // PITACO 2.4. O sprite, porem, deve indicar a versao fisica.
+            // Este indicador representa o controle respiratorio PITACO.
+            // A COM do 2.4 tambem alimenta o receptor legado; ambos devem
+            // exibir conectado aqui, sem criar uma segunda porta.
             var manager = PitacoConnectionManager.Active;
             bool connected = manager != null
-                ? manager.ConnectedVersion == PitacoConnectionManager.Version.Pitaco20
+                ? (manager.ConnectedVersion == PitacoConnectionManager.Version.Pitaco20 ||
+                   manager.ConnectedVersion == PitacoConnectionManager.Version.Pitaco24)
                 : serialController != null && serialController.IsConnected;
 
             var image = GetComponent<Image>();
