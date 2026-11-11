@@ -39,6 +39,22 @@ namespace Ibit.Plataform.UI
                     return;
                 }
 
+                if (coordinator.JsonCallbacksReceived == 0)
+                {
+                    var serial = manager.GetComponent<SerialControllerPitaco24>();
+                    bool rawJsonPresent = serial != null && serial.JsonMessagesReceived > 0;
+                    hud.text = rawJsonPresent
+                        ? "PITACO 2.4: conectado\nPPG: JSON nao encaminhado"
+                        : "PITACO 2.4: conectado\nPPG: aguardando JSON";
+                    return;
+                }
+
+                if (coordinator.ReceivedSampleFrames == 0)
+                {
+                    hud.text = "PITACO 2.4: conectado\nPPG: JSON sem amostras RED/IR";
+                    return;
+                }
+
                 if (!coordinator.OpticalContactConfirmed)
                 {
                     hud.text = "PITACO 2.4: conectado\nPPG: sem contato optico";

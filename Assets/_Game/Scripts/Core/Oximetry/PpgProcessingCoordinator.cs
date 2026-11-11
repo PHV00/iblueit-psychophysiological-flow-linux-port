@@ -72,10 +72,20 @@ namespace Ibit.Core.Oximetry
         private float lastSampleReceivedAt = -1f;
         private float nextLogTime;
         private long receivedSampleFrames;
+        private long jsonCallbacksReceived;
+        private long nonSampleJsonFrames;
+        private long invalidJsonFrames;
+        private long missingContactFrames;
+        private long invalidSampleFrames;
+        private string lastJsonType = "nenhum";
         private const uint RecalculationPeriodMs = 400;
 
         public PpgMeasurement LastMeasurement { get; private set; }
         public bool OpticalContactConfirmed { get; private set; }
+        // Distinguish JSON-looking frames, callbacks, recognized sample frames
+        // and actual valid PPG. These counters do not change the signal path.
+        public long JsonCallbacksReceived => jsonCallbacksReceived;
+        public long ReceivedSampleFrames => receivedSampleFrames;
         public event Action<PpgMeasurement> OnMeasurement;
 
         private void OnEnable()
@@ -104,7 +114,15 @@ namespace Ibit.Core.Oximetry
             {
                 nextLogTime = Time.unscaledTime + Math.Max(1f, logIntervalSeconds);
                 var measurement = LastMeasurement;
-                Debug.Log("[PPG C# diagnostico] JSON samples=" + receivedSampleFrames +
+                Debug.Log("[PPG C# diagnostico] JSON serial=" +
+                    (serialController != null ? serialController.JsonMessagesReceived : 0) +
+                    " | callbacks=" + jsonCallbacksReceived +
+                    " | samples=" + receivedSampleFrames +
+                    " | outroTipo=" + nonSampleJsonFrames +
+                    " | JSON invalido=" + invalidJsonFrames +
+                    " | semContato=" + missingContactFrames +
+                    " | amostraInvalida=" + invalidSampleFrames +
+                    " | ultimoTipo=" + lastJsonType +
                     " | contato=" + OpticalContactConfirmed +
                     " | buffer=" + buffer.Count +
                     " | estado=" + (measurement != null ? measurement.Status : "sem resultado") +
@@ -117,6 +135,10 @@ namespace Ibit.Core.Oximetry
 
         private void AttachIfAvailable()
         {
+            // The persistent manager owns the real serial controller. Prefer
+            // its colocated component to avoid subscribing to a scene duplicate.
+            if (serialController == null)
+                serialController = GetComponent<SerialControllerPitaco24>();
             if (serialController == null)
                 serialController = FindObjectOfType<SerialControllerPitaco24>();
             if (serialController == null) return;
@@ -155,13 +177,30 @@ namespace Ibit.Core.Oximetry
         {
             // G1 frames are intentionally ignored in this first, SQI-free prototype.
             if (string.IsNullOrEmpty(json)) return;
+            jsonCallbacksReceived++;
 
             SampleFrame frame;
             try { frame = JsonUtility.FromJson<SampleFrame>(json); }
-            catch (ArgumentException) { return; }
-
-            if (frame == null || frame.type != "sample" || frame.ppg == null)
+            catch (ArgumentException)
+            {
+                invalidJsonFrames++;
+                lastJsonType = "JSON-malformado";
                 return;
+            }
+
+            if (frame == null)
+            {
+                invalidJsonFrames++;
+                lastJsonType = "nulo";
+                return;
+            }
+
+            lastJsonType = string.IsNullOrEmpty(frame.type) ? "sem-type" : frame.type;
+            if (frame.type != "sample" || frame.ppg == null)
+            {
+                nonSampleJsonFrames++;
+                return;
+            }
 
             receivedSampleFrames++;
 
@@ -171,6 +210,7 @@ namespace Ibit.Core.Oximetry
             bool hasContact = frame.sqi != null && frame.sqi.contact;
             if (!hasContact)
             {
+                missingContactFrames++;
                 if (OpticalContactConfirmed || LastMeasurement == null ||
                     LastMeasurement.Status != "Sem contato optico")
                     ResetMeasurements("Sem contato optico");
@@ -181,7 +221,12 @@ namespace Ibit.Core.Oximetry
             PpgSample sample;
             if (!PpgSample.TryCreate(frame.seq, frame.t_ms,
                 frame.ppg.red, frame.ppg.ir, out sample))
+            {
+                invalidSampleFrames++;
+                LastMeasurement = new PpgMeasurement(0, 0, null, null,
+                    null, 0, "Amostra PPG invalida: seq/t_ms/RED/IR");
                 return;
+            }
 
             bool continuous = buffer.Add(sample);
             lastSampleReceivedAt = Time.unscaledTime;
