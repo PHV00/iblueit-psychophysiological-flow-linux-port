@@ -71,6 +71,7 @@ namespace Ibit.Core.Oximetry
         private float nextSearchTime;
         private float lastSampleReceivedAt = -1f;
         private float nextLogTime;
+        private long receivedSampleFrames;
         private const uint RecalculationPeriodMs = 400;
 
         public PpgMeasurement LastMeasurement { get; private set; }
@@ -95,6 +96,22 @@ namespace Ibit.Core.Oximetry
                 Time.unscaledTime - lastSampleReceivedAt > 3f)
             {
                 ResetMeasurements("Sem amostras PPG recentes");
+            }
+
+            // Diagnostico de toda a cadeia: recepcao, contato, janela e
+            // estimativas. Antes so havia log apos um calculo bem-sucedido.
+            if (logDiagnostics && Time.unscaledTime >= nextLogTime)
+            {
+                nextLogTime = Time.unscaledTime + Math.Max(1f, logIntervalSeconds);
+                var measurement = LastMeasurement;
+                Debug.Log("[PPG C# diagnostico] JSON samples=" + receivedSampleFrames +
+                    " | contato=" + OpticalContactConfirmed +
+                    " | buffer=" + buffer.Count +
+                    " | estado=" + (measurement != null ? measurement.Status : "sem resultado") +
+                    " | BPM=" + (measurement != null && measurement.BpmEstimate.HasValue
+                        ? measurement.BpmEstimate.Value.ToString("F1") : "--") +
+                    " | SpO2 DEMO=" + (measurement != null && measurement.SpO2DemoPercent.HasValue
+                        ? measurement.SpO2DemoPercent.Value.ToString("F1") : "--"));
             }
         }
 
@@ -145,6 +162,8 @@ namespace Ibit.Core.Oximetry
 
             if (frame == null || frame.type != "sample" || frame.ppg == null)
                 return;
+
+            receivedSampleFrames++;
 
             // Device reports contact explicitly. This is a basic display safety
             // condition, NOT G1/SQI approval and NOT clinical signal validation.
@@ -198,16 +217,7 @@ namespace Ibit.Core.Oximetry
                 autocorrelation, "EXPERIMENTAL - NAO CALIBRADO");
             OnMeasurement?.Invoke(LastMeasurement);
 
-            if (logDiagnostics && Time.unscaledTime >= nextLogTime)
-            {
-                nextLogTime = Time.unscaledTime + Math.Max(1f, logIntervalSeconds);
-                Debug.Log("[PPG C# experimental] BPM=" +
-                    (hasBpm ? bpm.ToString("F1") : "--") +
-                    " | SpO2 DEMO=" + (hasSpO2 ? spo2Demo.ToString("F1") : "--") +
-                    " | fs=" + processed.SamplingHz.ToString("F1") +
-                    " Hz | ACFr=" + autocorrelation.ToString("F2") +
-                    " | NAO USAR PARA DECISOES CLINICAS");
-            }
+
         }
     }
 }
