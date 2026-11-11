@@ -23,13 +23,12 @@ namespace Ibit.MainMenu.UI
 
         private void FixedUpdate()
         {
-            // Este indicador representa o controle respiratorio PITACO.
-            // A COM do 2.4 tambem alimenta o receptor legado; ambos devem
-            // exibir conectado aqui, sem criar uma segunda porta.
+            // Este indicador representa apenas o dispositivo fisico PITACO 2.0.
+            // O PITACO 2.4 pode reutilizar a API respiratoria legada,
+            // mas possui seu proprio indicador Pitaco24Status.
             var manager = PitacoConnectionManager.Active;
             bool connected = manager != null
-                ? (manager.ConnectedVersion == PitacoConnectionManager.Version.Pitaco20 ||
-                   manager.ConnectedVersion == PitacoConnectionManager.Version.Pitaco24)
+                ? manager.ConnectedVersion == PitacoConnectionManager.Version.Pitaco20
                 : serialController != null && serialController.IsConnected;
 
             var image = GetComponent<Image>();
