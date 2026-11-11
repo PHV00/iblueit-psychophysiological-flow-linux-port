@@ -32,9 +32,9 @@ namespace Ibit.Core.Oximetry
     }
 
     /// <summary>
-    /// Optional Unity component: attach in the Inspector to a GameObject in a scene
-    /// that also has SerialControllerPitaco24 (or assign that controller). No changes
-    /// to existing scenes, Player, HUD, DeepDDA, or USB COM ownership are required.
+    /// Receives PITACO 2.4 optical JSON through the existing serial event.
+    /// Bootstrapped persistently by PitacoConnectionManager (no extra COM).
+    /// Contact absence invalidates the window; G1 remains diagnostic only.
     /// </summary>
     public sealed class PpgProcessingCoordinator : MonoBehaviour
     {
@@ -46,12 +46,19 @@ namespace Ibit.Core.Oximetry
         }
 
         [Serializable]
+        private sealed class SqiPayload
+        {
+            public bool contact;
+        }
+
+        [Serializable]
         private sealed class SampleFrame
         {
             public string type;
             public int seq;
             public long t_ms;
             public PpgPayload ppg;
+            public SqiPayload sqi;
         }
 
         [SerializeField] private SerialControllerPitaco24 serialController;
@@ -67,6 +74,7 @@ namespace Ibit.Core.Oximetry
         private const uint RecalculationPeriodMs = 400;
 
         public PpgMeasurement LastMeasurement { get; private set; }
+        public bool OpticalContactConfirmed { get; private set; }
         public event Action<PpgMeasurement> OnMeasurement;
 
         private void OnEnable()
@@ -120,6 +128,7 @@ namespace Ibit.Core.Oximetry
         private void ResetMeasurements(string status)
         {
             buffer.Clear();
+            OpticalContactConfirmed = false;
             hasPreviousProcessingTime = false;
             lastSampleReceivedAt = -1f;
             LastMeasurement = new PpgMeasurement(0, 0, null, null, null, 0, status);
@@ -136,6 +145,19 @@ namespace Ibit.Core.Oximetry
 
             if (frame == null || frame.type != "sample" || frame.ppg == null)
                 return;
+
+            // Device reports contact explicitly. This is a basic display safety
+            // condition, NOT G1/SQI approval and NOT clinical signal validation.
+            // Reset the window so a newly placed finger must supply 8 s of data.
+            bool hasContact = frame.sqi != null && frame.sqi.contact;
+            if (!hasContact)
+            {
+                if (OpticalContactConfirmed || LastMeasurement == null ||
+                    LastMeasurement.Status != "Sem contato optico")
+                    ResetMeasurements("Sem contato optico");
+                return;
+            }
+            OpticalContactConfirmed = true;
 
             PpgSample sample;
             if (!PpgSample.TryCreate(frame.seq, frame.t_ms,

@@ -1,5 +1,10 @@
 # I Blue It 5.0 — Marco 1 (protótipo): BPM e SpO2 demonstrativa em C#
 
+> **Atualização posterior:** a etapa 1 de integração visual agora inicia automaticamente
+> o coordenador e o hub no manager persistente, e conecta os HUDs da plataforma,
+> WaterGame e CakeGame. Consulte [PITACO24_OXIMETRY_HUB_VISUAL.md](PITACO24_OXIMETRY_HUB_VISUAL.md).
+> As afirmações abaixo sobre ausência de HUD/instalação manual descrevem o marco original.
+
 > **Pesquisa / protótipo não calibrado.** Os valores produzidos **não são
 > medições clínicas** e **não podem** acionar alertas, recompensas ML-Agents,
 > regras de dificuldade, decisões de tratamento ou segurança do paciente.

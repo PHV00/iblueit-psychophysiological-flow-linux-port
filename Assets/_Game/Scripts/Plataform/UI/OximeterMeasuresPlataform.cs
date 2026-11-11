@@ -1,24 +1,36 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
+using Ibit.Core.Oximetry;
 
 namespace Ibit.Plataform.UI
 {
     public class OximeterMeasuresPlataform : MonoBehaviour
     {
         private Player plr;
+        private Text label;
         private void Awake()
         {
             plr = FindObjectOfType<Player>();
+            label = GetComponent<Text>();
         }
 
         private void Update()
-        {   
-            if (plr.oxiActive)
-            { // Se o oxímetro estiver conectado, exibe seus valores
-                GetComponent<Text>().text = $"HR: {plr.HRValue} bpm\nSPO2: {plr.SPO2Value} %";
-            } else {
-                GetComponent<Text>().text = "";
+        {
+            if (label == null) return;
+
+            // PITACO 2.4 gets priority when connected. Only the HUD is changed:
+            // do not write Player.sensorValueOxiSPO/HR or invoke Mixer/DeepDDA.
+            string experimentalText;
+            if (OximetryHudFormatter.TryFormatPitaco24(out experimentalText))
+            {
+                label.text = experimentalText;
+                return;
             }
+
+            // Preserve the existing serial oximeter fallback unchanged.
+            label.text = plr != null && plr.oxiActive
+                ? $"HR: {plr.HRValue} bpm\nSPO2: {plr.SPO2Value} %"
+                : "";
         }
     }
 }

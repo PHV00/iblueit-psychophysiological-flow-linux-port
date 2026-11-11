@@ -112,6 +112,37 @@ public class PpgProcessingTests
     }
 
     [Test]
+    public void HudFormatterMarksDemoAndKeepsTwoSeparateValues()
+    {
+        var reading = new OximetryReading(8000, DateTime.UtcNow, 75.1,
+            95.0, 0.667, 25.0, 0.8, "EXPERIMENTAL - NAO CALIBRADO");
+        var text = OximetryHudFormatter.Format(reading);
+        StringAssert.Contains("75.1 bpm", text);
+        StringAssert.Contains("SpO2 DEMO: 95.0 %", text);
+        StringAssert.DoesNotContain("75.1,95.0", text);
+    }
+
+    [Test]
+    public void HudFormatterDoesNotRepresentMissingValuesAsZero()
+    {
+        var missing = new OximetryReading(0, DateTime.UtcNow, null,
+            null, null, 0, 0, "Sem contato optico");
+        var text = OximetryHudFormatter.Format(missing);
+        StringAssert.Contains("sem contato", text);
+        StringAssert.Contains("HR: -- | SpO2 DEMO: --", text);
+    }
+
+    [Test]
+    public void HudFormatterPreservesBpmWhenDemoSpo2Unavailable()
+    {
+        var partial = new OximetryReading(8000, DateTime.UtcNow, 75,
+            null, null, 25, 0.75, "EXPERIMENTAL - NAO CALIBRADO");
+        var text = OximetryHudFormatter.Format(partial);
+        StringAssert.Contains("75.0 bpm", text);
+        StringAssert.Contains("SpO2 DEMO: -- %", text);
+    }
+
+    [Test]
     public void SequenceGapRestartsTheBuffer()
     {
         var buffer = new PpgSampleBuffer();

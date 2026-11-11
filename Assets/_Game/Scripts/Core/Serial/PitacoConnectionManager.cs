@@ -8,6 +8,7 @@ using System.IO.Ports;
 using System.Threading;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using Ibit.Core.Oximetry;
 
 namespace Ibit.Core.Serial
 {
@@ -59,6 +60,11 @@ namespace Ibit.Core.Serial
             var go = new GameObject("Pitaco Connection Manager");
             go.AddComponent<PitacoConnectionManager>();
             DontDestroyOnLoad(go);
+            // One persistent USB connection and one optical pipeline across scenes.
+            // The modern serial controller forwards data; it does NOT open another COM.
+            go.AddComponent<SerialControllerPitaco24>();
+            go.AddComponent<PpgProcessingCoordinator>();
+            go.AddComponent<OximetryIntegrationHub>();
         }
 
         private void Awake()
@@ -87,7 +93,9 @@ namespace Ibit.Core.Serial
         private void BindControllers()
         {
             var nextLegacy = FindObjectOfType<SerialControllerPitaco>();
-            var nextModern = FindObjectOfType<SerialControllerPitaco24>();
+            var nextModern = GetComponent<SerialControllerPitaco24>();
+            if (nextModern == null)
+                nextModern = FindObjectOfType<SerialControllerPitaco24>();
 
             if (legacy != nextLegacy)
             {
