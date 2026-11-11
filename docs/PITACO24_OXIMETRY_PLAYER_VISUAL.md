@@ -79,3 +79,11 @@ WaterGame e CakeGame possuem classes Player independentes do Player da plataform
 8. Se houver oximetro antigo disponivel, testar o fallback do HUD.
 
 Os testes unitarios nao substituem teste de cena nem validacao clinica.
+
+## Correcao do status 2.4 e HUD (11/11/2026)
+
+- `Pitaco24Status.cs` agora consulta somente `PitacoConnectionManager.Active.ConnectedVersion == Pitaco24`, evitando que o status de uma instancia `SerialControllerPitaco24` de cena fique desatualizado. O `PitacoStatus.cs` do 2.0 permanece inalterado; os dois indicadores nao devem ficar verdes simultaneamente.
+- A SpO2 DEMO foi calculada nos logs Unity enviados pelo teste (99.5%), mas nao cabia no campo visual antigo. O `StatusDevices.prefab`, objeto `Oximetro Status/measures`, tinha `RectTransform` de apenas 83.1 x 35.17. O campo passou para 220 x 57, expandindo para a esquerda e para baixo enquanto preserva o limite superior/direito. A fonte foi ampliada de 13 para 16, e o alinhamento mudou de LowerCenter para UpperRight.
+- A formatacao de `Player.OximetryHudText` continua em duas linhas, identificando BPM [2.4] e SpO2 DEMO. Nenhuma alteracao nas formulas, fluxo USB, Player, Mixer, ML-Agents ou banco.
+- Verificacao local: entrar em Play Mode; no menu, confirmar que apenas o indicador 2.4 fica verde; na plataforma, confirmar duas linhas visiveis e sem corte. Se houver override de tamanho no objeto da cena, remover o override de `measures` para herdar o prefab atualizado.
+- Codigo e prefab conferidos estaticamente no GitHub; testes visuais no Unity com hardware ainda pendentes.
