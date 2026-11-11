@@ -144,6 +144,8 @@ namespace Ibit.Core.Serial
                 switch (packet.Kind)
                 {
                     case PacketKind.Connected:
+                        // Uma nova sessao nao pode herdar medidas da anterior.
+                        Pitaco24Telemetry.Reset();
                         activeVersion = packet.DeviceVersion;
                         Debug.Log("[PITACO Manager] " + activeVersion + " identificado em " +
                                   packet.Text + " (COM exclusiva).");
@@ -152,14 +154,21 @@ namespace Ibit.Core.Serial
                             modern.ManagedConnected();
                         break;
                     case PacketKind.Disconnected:
+                        Pitaco24Telemetry.Reset();
                         if (modern != null) modern.ManagedDisconnected();
                         if (legacy != null) legacy.ManagedDisconnected();
                         activeVersion = Version.None;
                         Debug.LogWarning("[PITACO Manager] Conexao perdida. Redescobrindo COM...");
                         break;
                     case PacketKind.Line:
-                        if (activeVersion == Version.Pitaco24 && modern != null)
-                            modern.ManagedLine(packet.Text);
+                        // O manager persiste entre cenas. O JSON precisa continuar
+                        // disponivel mesmo onde nao exista SerialControllerPitaco24.
+                        if (activeVersion == Version.Pitaco24)
+                        {
+                            Pitaco24Telemetry.AcceptLine(packet.Text);
+                            if (modern != null)
+                                modern.ManagedLine(packet.Text);
+                        }
                         if (legacy != null &&
                             (activeVersion == Version.Pitaco20 || IsNumericPressure(packet.Text)))
                             legacy.ManagedLine(packet.Text);
