@@ -1,6 +1,8 @@
 using System.Collections;
 using Ibit.Core.Data;
 using Ibit.Core.Serial;
+using Ibit.Core.Oximetry;
+using Ibit.Core.Database;
 using Ibit.Core.Util;
 using Ibit.Core.Audio;
 using UnityEngine;
@@ -44,9 +46,97 @@ namespace Ibit.WaterGame
         public float SPO2Value;
         public bool oxiActive = false;
 
+        // O Player de cada cena continua controlando o HUD legado.
+        // A nova fonte 2.4 apenas atualiza campos VISUAIS (nao o Mixer).
+        private bool pitaco24OxiSourceActive;
+        private bool pitaco24VisualPublished;
+        private double? pitaco24DisplayedBpm;
+        private double? pitaco24DisplayedSpO2;
+        private float nextPitaco24DisplayTime;
+        private float pitaco24VisualInterval;
+        private PpgProcessingCoordinator pitaco24PpgCoordinator;
+
+        public string OximetryHudText
+        {
+            get
+            {
+                return pitaco24OxiSourceActive
+                    ? Ibit.Plataform.Player.FormatPitaco24Oximetry(
+                        pitaco24DisplayedBpm, pitaco24DisplayedSpO2)
+                    : $"HR: {HRValue} bpm\nSPO2: {SPO2Value} %";
+            }
+        }
+
+        private void UpdatePitaco24Oximetry()
+        {
+            var manager = PitacoConnectionManager.Active;
+            bool connected = manager != null &&
+                manager.ConnectedVersion == PitacoConnectionManager.Version.Pitaco24;
+            if (!connected)
+            {
+                if (pitaco24OxiSourceActive)
+                {
+                    pitaco24OxiSourceActive = false;
+                    pitaco24VisualPublished = false;
+                    pitaco24DisplayedBpm = null;
+                    pitaco24DisplayedSpO2 = null;
+                    nextPitaco24DisplayTime = 0f;
+                    oxiActive = false;
+                }
+                return;
+            }
+
+            pitaco24OxiSourceActive = true;
+            oxiActive = true; // Fonte conectada; nao significa SpO2 validada.
+
+            if (pitaco24PpgCoordinator == null)
+                pitaco24PpgCoordinator = manager.GetComponent<PpgProcessingCoordinator>();
+
+            var measurement = pitaco24PpgCoordinator != null
+                ? pitaco24PpgCoordinator.LastMeasurement : null;
+
+            if (pitaco24PpgCoordinator == null ||
+                !pitaco24PpgCoordinator.OpticalContactConfirmed ||
+                measurement == null ||
+                (!measurement.BpmEstimate.HasValue &&
+                 !measurement.SpO2DemoPercent.HasValue))
+            {
+                pitaco24DisplayedBpm = null;
+                pitaco24DisplayedSpO2 = null;
+                pitaco24VisualPublished = false;
+                nextPitaco24DisplayTime = 0f;
+                HRValue = 0f;
+                SPO2Value = 0f;
+                return;
+            }
+
+            // Um canal indisponivel nao pode permanecer com valor anterior.
+            if (!measurement.BpmEstimate.HasValue) pitaco24DisplayedBpm = null;
+            if (!measurement.SpO2DemoPercent.HasValue)
+                pitaco24DisplayedSpO2 = null;
+
+            if (!pitaco24VisualPublished || Time.time >= nextPitaco24DisplayTime)
+            {
+                pitaco24DisplayedBpm = measurement.BpmEstimate;
+                pitaco24DisplayedSpO2 = measurement.SpO2DemoPercent;
+                pitaco24VisualPublished = true;
+                nextPitaco24DisplayTime = Time.time + pitaco24VisualInterval;
+            }
+
+            HRValue = pitaco24DisplayedBpm.HasValue
+                ? (float)pitaco24DisplayedBpm.Value : 0f;
+            SPO2Value = pitaco24DisplayedSpO2.HasValue
+                ? (float)pitaco24DisplayedSpO2.Value : 0f;
+        }
+
+
 
         private void Start()
         {
+            int oxiReadingsPerMinute = SignalTreatmentDb.LoadSignalParameters("O");
+            pitaco24VisualInterval = oxiReadingsPerMinute > 0
+                ? 60f / oxiReadingsPerMinute : 6f;
+
             scp = FindObjectOfType<SerialControllerPitaco>();
             scm = FindObjectOfType<SerialControllerMano>();
             scc = FindObjectOfType<SerialControllerCinta>();
@@ -319,6 +409,7 @@ namespace Ibit.WaterGame
 
         private void Update()
         {
+            UpdatePitaco24Oximetry();
             if ((Input.GetKeyDown(KeyCode.KeypadEnter) || Input.GetKeyDown(KeyCode.Return)) && waitSignal == false)
             {
                 ExecuteNextStep();

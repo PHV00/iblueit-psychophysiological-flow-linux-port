@@ -138,6 +138,14 @@ public class PpgProcessingTests
     }
 
     [Test]
+    public void AllThreePlayerTypesExposeLegacyOximetryHudContract()
+    {
+        Assert.IsNotNull(typeof(Ibit.Plataform.Player).GetProperty("OximetryHudText"));
+        Assert.IsNotNull(typeof(Ibit.WaterGame.Player).GetProperty("OximetryHudText"));
+        Assert.IsNotNull(typeof(Ibit.CakeGame.Player).GetProperty("OximetryHudText"));
+    }
+
+    [Test]
     public void SequenceGapRestartsTheBuffer()
     {
         var buffer = new PpgSampleBuffer();

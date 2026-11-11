@@ -60,6 +60,10 @@ loggers e DTOs do banco podem consumir as estimativas tipadas publicadas
 pelo `PpgProcessingCoordinator`, sem hub adicional e sem usar
 `BPM,SpO2` como um numero decimal unico.
 
+## Correcao de compilacao dos minijogos
+
+WaterGame e CakeGame possuem classes Player independentes do Player da plataforma. Ambas agora implementam `OximetryHudText` e a leitura do `PpgProcessingCoordinator`, preservando a cadencia `O;10`. A formatacao estatica e reutilizada do Player da plataforma; nenhum novo hub/formatador foi adicionado. Teste adicional confirma o contrato nas tres classes.
+
 ## Checklist Unity
 
 1. Atualizar a branch, abrir no Unity 2022.3.4f1 e verificar compilacao.
