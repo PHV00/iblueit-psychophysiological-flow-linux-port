@@ -180,10 +180,12 @@ namespace Ibit.Core.Oximetry.Placement
 
             var state = monitor.State;
             bool ownsPause = pause != null && pause.OwnsPause;
-            bool otherPause = GameManager.GameIsPaused && !ownsPause;
+            bool otherPause = GameManager.HasLegacyPauseRequest ||
+                (GameManager.GameIsPaused && !ownsPause);
 
-            // Never cover an existing clinical warning, result or pause menu.
-            bool showingModal = monitor.SessionActive && ownsPause;
+            // Clinical/manual dialogs must remain visible above this optional
+            // positioning dialog, even if our token was acquired first.
+            bool showingModal = monitor.SessionActive && ownsPause && !otherPause;
             modal.SetActive(showingModal);
             banner.SetActive(false);
 

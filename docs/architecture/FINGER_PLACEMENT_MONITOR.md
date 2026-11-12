@@ -64,7 +64,9 @@ sera validada por valores antigos.
 `fingerPlacementPauseRequested`. Pausa real = OU logico de ambos.
 Um pedido clinico/manual que chegar enquanto o monitor estiver pausado
 tambem registra seu proprio pedido. O monitor **nunca libera uma pausa
-legada** e nao toma posse de uma pausa preexistente.
+legada** e nao toma posse de uma pausa preexistente. Quando uma pausa
+legada e solicitada, o painel do dedo fica oculto para nao cobrir o
+painel de seguranca, mesmo que o monitor tenha pausado primeiro.
 
 Importante: a infraestrutura legada ainda agrupa *suas proprias*
 pausas manuais/clinicas num unico pedido booleano; esta mudanca

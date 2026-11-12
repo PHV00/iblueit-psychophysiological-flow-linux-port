@@ -12,6 +12,8 @@ namespace Ibit.Core.Game
         private static bool legacyPauseRequested;
         private static bool fingerPlacementPauseRequested;
         public static bool GameIsPaused { get; private set; }
+        // Lets high-priority legacy security/manual panels take visual priority.
+        public static bool HasLegacyPauseRequest => legacyPauseRequested;
 
         // Legacy callers (manual menus and clinical security panels) retain
         // their own hold, even if the finger-placement overlay is already up.

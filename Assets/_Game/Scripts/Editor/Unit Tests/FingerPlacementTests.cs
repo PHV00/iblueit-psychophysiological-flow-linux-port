@@ -89,6 +89,7 @@ public class FingerPlacementTests
         try
         {
             GameManager.PauseGame();
+            Assert.IsTrue(GameManager.HasLegacyPauseRequest);
             Assert.IsFalse(GameManager.TryPauseForFingerPlacement());
             Assert.IsTrue(GameManager.GameIsPaused);
             GameManager.UnPauseGame();
@@ -97,6 +98,7 @@ public class FingerPlacementTests
             Assert.IsTrue(GameManager.TryPauseForFingerPlacement());
             GameManager.PauseGame(); // Security/manual pause while placement owns it.
             GameManager.ReleaseFingerPlacementPause();
+            Assert.IsTrue(GameManager.HasLegacyPauseRequest);
             Assert.IsTrue(GameManager.GameIsPaused); // Legacy still owns the pause.
             GameManager.UnPauseGame();
             Assert.IsFalse(GameManager.GameIsPaused);
