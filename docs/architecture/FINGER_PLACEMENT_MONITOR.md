@@ -1,4 +1,11 @@
 # FingerPlacementMonitor — arquitetura e teste (Unity 2022.3.4f1)
+> **Atualizacao 2026-11-12:** o bloqueio de estimativas C# evoluiu:
+> alem de contato optico, `PpgProcessingCoordinator` exige G1
+> recente recebido por `type=g1` (5 s no firmware, prazo de 6,5 s
+> no Unity). `FingerPlacementMonitor` segue independente e observa
+> contato antes do bloqueio por G1. Estado atual:
+> [Marco 01](../marcos/MARCO_01_PITACO24_SQI_HUD_UNITY.md).
+
 
 **Branch:** `feature/ppg-csharp-bpm-spo2-mvp`  
 **Checkpoint pre-implementacao:** `experiments/ppg-pre-finger-placement`  

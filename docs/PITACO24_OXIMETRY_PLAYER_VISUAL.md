@@ -1,4 +1,12 @@
 # PITACO 2.4 — etapa 1: oximetria pelo Player original
+> **Atualizacao 2026-11-12:** o
+> [Marco 01 consolidado](marcos/MARCO_01_PITACO24_SQI_HUD_UNITY.md)
+> supera o estado descrito originalmente abaixo. O firmware G1 passou a
+> condicionar publicacao de estimativas no Unity e a HUD experimental
+> agora publica numericos a cada **1 segundo**. A janela de calculo
+> continua em 8 s e a cadencia de consumo `O;10` do oximetro legado
+> nao foi alterada. Passagens antigas de 6 s ou G1 nao integrado sao historicas.
+
 
 **Estado:** codigo atualizado na branch experimental; ainda sem compilacao no Unity
 ou validacao com hardware. BPM e SpO2 DEMO sao experimentais e nao clinicos.

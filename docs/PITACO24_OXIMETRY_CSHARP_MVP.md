@@ -1,4 +1,10 @@
 # I Blue It 5.0 — Marco 1 (protótipo): BPM e SpO2 demonstrativa em C#
+> **Atualizacao 2026-11-12:** este documento descreve a primeira versao do
+> prototipo C#. A evolucao funcional com contato optico, Gate 01 do
+> firmware e HUD a cada 1 s consta no
+> [Marco 01 consolidado](marcos/MARCO_01_PITACO24_SQI_HUD_UNITY.md).
+> As frases abaixo sobre ausencia de SQI ou integracao visual sao historicas.
+
 
 > **Atualização posterior:** a etapa 1 de integração visual foi simplificada:
 > o coordenador é iniciado automaticamente pelo manager persistente e as cenas
