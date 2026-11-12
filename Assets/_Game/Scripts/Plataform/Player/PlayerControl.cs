@@ -48,6 +48,10 @@ namespace Ibit.Plataform
         public bool oxiActive = false;
         public float auxValuesOxi;
 
+        // Experimental PITACO 2.4 HUD refresh only. Keep the 8-second PPG
+        // estimation window, 5-second G1 and the legacy oxi O;10 schedule intact.
+        public const float Pitaco24HudIntervalSeconds = 1f;
+
         // Only the visual side of Player is bridged in phase 1.
         // The existing STATIC sensorValueOxi* fields remain owned by the
         // legacy oximeter, so the Mixer/DeepDDA are not affected yet.
@@ -129,7 +133,7 @@ namespace Ibit.Plataform
             }
 
             // A channel which has become unavailable is cleared immediately,
-            // even while the 6-second publication interval is running.
+            // even while the 1-second visual publication interval is running.
             bool invalidated =
                 (pitaco24DisplayedBpm.HasValue && !sample.BpmEstimate.HasValue) ||
                 (pitaco24DisplayedSpO2.HasValue && !sample.SpO2DemoPercent.HasValue);
@@ -143,9 +147,10 @@ namespace Ibit.Plataform
                     ? (float)pitaco24DisplayedSpO2.Value : 0f;
             }
 
-            // O;10 is retained: at most 10 visual numeric publications/min.
-            // The first available reading can appear immediately after 8 s.
-            if (!pitaco24VisualPublished || Time.time >= nextPitaco24DisplayTime)
+            // Experimental PITACO 2.4 refreshes at most once per second.
+            // The first valid reading appears immediately after the 8-second
+            // processing window. Invalid readings are cleared above immediately.
+            if (!pitaco24VisualPublished || Time.unscaledTime >= nextPitaco24DisplayTime)
             {
                 pitaco24DisplayedBpm = sample.BpmEstimate;
                 pitaco24DisplayedSpO2 = sample.SpO2DemoPercent;
@@ -154,7 +159,8 @@ namespace Ibit.Plataform
                 SPO2Value = pitaco24DisplayedSpO2.HasValue
                     ? (float)pitaco24DisplayedSpO2.Value : 0f;
                 pitaco24VisualPublished = true;
-                nextPitaco24DisplayTime = Time.time + timeBetweenSamplesOxi;
+                nextPitaco24DisplayTime =
+                    Time.unscaledTime + Pitaco24HudIntervalSeconds;
             }
         }
 

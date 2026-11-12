@@ -53,7 +53,6 @@ namespace Ibit.WaterGame
         private double? pitaco24DisplayedBpm;
         private double? pitaco24DisplayedSpO2;
         private float nextPitaco24DisplayTime;
-        private float pitaco24VisualInterval;
         private PpgProcessingCoordinator pitaco24PpgCoordinator;
 
         public string OximetryHudText
@@ -115,12 +114,14 @@ namespace Ibit.WaterGame
             if (!measurement.SpO2DemoPercent.HasValue)
                 pitaco24DisplayedSpO2 = null;
 
-            if (!pitaco24VisualPublished || Time.time >= nextPitaco24DisplayTime)
+            // 1-second visual refresh; retain immediate invalidation above.
+            if (!pitaco24VisualPublished || Time.unscaledTime >= nextPitaco24DisplayTime)
             {
                 pitaco24DisplayedBpm = measurement.BpmEstimate;
                 pitaco24DisplayedSpO2 = measurement.SpO2DemoPercent;
                 pitaco24VisualPublished = true;
-                nextPitaco24DisplayTime = Time.time + pitaco24VisualInterval;
+                nextPitaco24DisplayTime =
+                    Time.unscaledTime + Ibit.Plataform.Player.Pitaco24HudIntervalSeconds;
             }
 
             HRValue = pitaco24DisplayedBpm.HasValue
@@ -133,10 +134,6 @@ namespace Ibit.WaterGame
 
         private void Start()
         {
-            int oxiReadingsPerMinute = SignalTreatmentDb.LoadSignalParameters("O");
-            pitaco24VisualInterval = oxiReadingsPerMinute > 0
-                ? 60f / oxiReadingsPerMinute : 6f;
-
             scp = FindObjectOfType<SerialControllerPitaco>();
             scm = FindObjectOfType<SerialControllerMano>();
             scc = FindObjectOfType<SerialControllerCinta>();
