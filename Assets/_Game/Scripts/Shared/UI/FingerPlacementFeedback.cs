@@ -23,6 +23,7 @@ namespace Ibit.Core.Oximetry.Placement
         private Button resumeButton;
         private Text resumeText;
         private Font font;
+        private bool previousLegacyPause;
 
         private void OnEnable()
         {
@@ -65,6 +66,17 @@ namespace Ibit.Core.Oximetry.Placement
             // after the active scene has already been loaded in the Editor.
             if (root == null && monitor != null && monitor.SessionActive)
                 CreateOverlayIfNeeded(SceneManager.GetActiveScene());
+
+            // A safety/manual panel can request its legacy pause while the
+            // finger overlay already holds Time.timeScale=0. In that case
+            // GameIsPaused does not change and OnGamePause is not emitted:
+            // detect the ownership change explicitly and yield visual priority.
+            bool legacyPause = GameManager.HasLegacyPauseRequest;
+            if (legacyPause != previousLegacyPause)
+            {
+                previousLegacyPause = legacyPause;
+                Refresh();
+            }
         }
 
         private void CreateOverlayIfNeeded(Scene scene)
