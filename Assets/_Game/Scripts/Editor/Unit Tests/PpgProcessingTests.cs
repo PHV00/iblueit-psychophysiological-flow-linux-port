@@ -211,6 +211,175 @@ public class PpgProcessingTests
         }
     }
 
+    // Gate 01 is calculated by the ESP32; the Unity coordinator only accepts
+    // fresh, positive G1 window decisions. These tests exercise actual JSON.
+    private static void ReceiveG1TestJson(PpgProcessingCoordinator coordinator, string json)
+    {
+        var receive = typeof(PpgProcessingCoordinator).GetMethod(
+            "ReceiveJson", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.IsNotNull(receive);
+        receive.Invoke(coordinator, new object[] { json });
+    }
+
+    private static string MakeGate01TestJson(uint deviceMs, bool passed,
+        int reason, int sampleCount = 125)
+    {
+        return "{\"type\":\"g1\",\"t_ms\":" + deviceMs +
+            ",\"window\":1,\"sqi\":{\"g1\":" +
+            (passed ? "true" : "false") + ",\"reason\":" + reason +
+            ",\"samples\":" + sampleCount + "}}";
+    }
+
+    private static string MakeGate01TestSample(int seq, bool contact, int reason = 0)
+    {
+        double phase = 2.0 * Math.PI * 75.0 * seq * 0.040 / 60.0;
+        int red = (int)Math.Round(60000.0 + 500.0 * Math.Sin(phase));
+        int ir = (int)Math.Round(80000.0 + 1000.0 * Math.Sin(phase));
+        return "{\"type\":\"sample\",\"seq\":" + seq +
+            ",\"t_ms\":" + (seq * 40) +
+            ",\"ppg\":{\"red\":" + red + ",\"ir\":" + ir +
+            "},\"sqi\":{\"g1\":null,\"reason\":" + reason +
+            ",\"contact\":" + (contact ? "true" : "false") + "}}";
+    }
+
+    [Test]
+    public void Gate01WaitingBlocksEstimatesDespiteEightSecondsOfPulses()
+    {
+        var gameObject = new GameObject("PPG G1 pending test");
+        try
+        {
+            var coordinator = gameObject.AddComponent<PpgProcessingCoordinator>();
+            for (int i = 0; i < 210; i++)
+                ReceiveG1TestJson(coordinator, MakeGate01TestSample(i, true));
+
+            Assert.AreEqual("Waiting", coordinator.Gate01Status);
+            Assert.IsTrue(coordinator.OpticalContactConfirmed);
+            Assert.IsFalse(coordinator.LastMeasurement.BpmEstimate.HasValue);
+            Assert.IsFalse(coordinator.LastMeasurement.SpO2DemoPercent.HasValue);
+            StringAssert.Contains("Aguardando aprovacao G1",
+                coordinator.LastMeasurement.Status);
+        }
+        finally { UnityEngine.Object.DestroyImmediate(gameObject); }
+    }
+
+    [Test]
+    public void Gate01PassAtFiveSecondsAllowsEightSecondPpgWindow()
+    {
+        var gameObject = new GameObject("PPG G1 pass test");
+        try
+        {
+            var coordinator = gameObject.AddComponent<PpgProcessingCoordinator>();
+            for (int i = 0; i < 210; i++)
+            {
+                ReceiveG1TestJson(coordinator, MakeGate01TestSample(i, true));
+                if (i == 125)
+                    ReceiveG1TestJson(coordinator,
+                        MakeGate01TestJson(5000, true, 0));
+            }
+            Assert.AreEqual("Passed", coordinator.Gate01Status);
+            Assert.IsTrue(coordinator.LastMeasurement.BpmEstimate.HasValue);
+            Assert.IsTrue(coordinator.LastMeasurement.SpO2DemoPercent.HasValue);
+        }
+        finally { UnityEngine.Object.DestroyImmediate(gameObject); }
+    }
+
+    [Test]
+    public void Gate01FailureInvalidatesPreviousEstimatesAndRetainsContact()
+    {
+        var gameObject = new GameObject("PPG G1 failure test");
+        try
+        {
+            var coordinator = gameObject.AddComponent<PpgProcessingCoordinator>();
+            for (int i = 0; i < 210; i++)
+            {
+                ReceiveG1TestJson(coordinator, MakeGate01TestSample(i, true));
+                if (i == 125)
+                    ReceiveG1TestJson(coordinator,
+                        MakeGate01TestJson(5000, true, 0));
+            }
+            Assert.IsTrue(coordinator.LastMeasurement.SpO2DemoPercent.HasValue);
+            ReceiveG1TestJson(coordinator,
+                MakeGate01TestJson(10000, false, 4));
+            Assert.AreEqual("Failed", coordinator.Gate01Status);
+            Assert.AreEqual(4, coordinator.LastGate01Reason);
+            Assert.IsTrue(coordinator.OpticalContactConfirmed);
+            Assert.IsFalse(coordinator.LastMeasurement.BpmEstimate.HasValue);
+            Assert.IsFalse(coordinator.LastMeasurement.SpO2DemoPercent.HasValue);
+
+            // Buffer was reset: a fresh PASS can restore later measurements.
+            for (int i = 210; i < 420; i++)
+            {
+                ReceiveG1TestJson(coordinator, MakeGate01TestSample(i, true));
+                if (i == 375)
+                    ReceiveG1TestJson(coordinator,
+                        MakeGate01TestJson(15000, true, 0));
+            }
+            Assert.AreEqual("Passed", coordinator.Gate01Status);
+            Assert.IsTrue(coordinator.LastMeasurement.SpO2DemoPercent.HasValue);
+        }
+        finally { UnityEngine.Object.DestroyImmediate(gameObject); }
+    }
+
+    [Test]
+    public void Gate01OldPassExpiresAndCannotAuthorizeNewSample()
+    {
+        var gameObject = new GameObject("PPG G1 stale test");
+        try
+        {
+            var coordinator = gameObject.AddComponent<PpgProcessingCoordinator>();
+            ReceiveG1TestJson(coordinator, MakeGate01TestJson(0, true, 0));
+            for (int i = 0; i < 210; i++)
+                ReceiveG1TestJson(coordinator, MakeGate01TestSample(i, true));
+            Assert.AreEqual("Stale", coordinator.Gate01Status);
+            Assert.IsFalse(coordinator.LastMeasurement.BpmEstimate.HasValue);
+            Assert.IsFalse(coordinator.LastMeasurement.SpO2DemoPercent.HasValue);
+        }
+        finally { UnityEngine.Object.DestroyImmediate(gameObject); }
+    }
+
+    [Test]
+    public void Gate01SessionResetOrContactLossRevokesPreviousPass()
+    {
+        var gameObject = new GameObject("PPG G1 reset test");
+        try
+        {
+            var coordinator = gameObject.AddComponent<PpgProcessingCoordinator>();
+            for (int i = 0; i <= 125; i++)
+                ReceiveG1TestJson(coordinator, MakeGate01TestSample(i, true));
+            ReceiveG1TestJson(coordinator, MakeGate01TestJson(5000, true, 0));
+            Assert.AreEqual("Passed", coordinator.Gate01Status);
+
+            // Firmware g1=null, reason=1 after restarting collection.
+            ReceiveG1TestJson(coordinator, MakeGate01TestSample(126, true, 1));
+            Assert.AreEqual("Waiting", coordinator.Gate01Status);
+            Assert.IsFalse(coordinator.LastMeasurement.SpO2DemoPercent.HasValue);
+
+            ReceiveG1TestJson(coordinator, MakeGate01TestJson(10000, true, 0));
+            Assert.AreEqual("Passed", coordinator.Gate01Status);
+            ReceiveG1TestJson(coordinator, MakeGate01TestSample(127, false, 10));
+            Assert.AreEqual("Waiting", coordinator.Gate01Status);
+            Assert.IsFalse(coordinator.OpticalContactConfirmed);
+            Assert.IsFalse(coordinator.LastMeasurement.SpO2DemoPercent.HasValue);
+        }
+        finally { UnityEngine.Object.DestroyImmediate(gameObject); }
+    }
+
+    [Test]
+    public void Gate01OutOfOrderResultCannotOverrideLatestFailure()
+    {
+        var gameObject = new GameObject("PPG G1 ordering test");
+        try
+        {
+            var coordinator = gameObject.AddComponent<PpgProcessingCoordinator>();
+            ReceiveG1TestJson(coordinator, MakeGate01TestJson(10000, false, 4));
+            ReceiveG1TestJson(coordinator, MakeGate01TestJson(5000, true, 0));
+            Assert.AreEqual("Failed", coordinator.Gate01Status);
+            Assert.AreEqual(4, coordinator.LastGate01Reason);
+            Assert.IsFalse(coordinator.Gate01Approved);
+        }
+        finally { UnityEngine.Object.DestroyImmediate(gameObject); }
+    }
+
     [Test]
     public void SequenceGapRestartsTheBuffer()
     {

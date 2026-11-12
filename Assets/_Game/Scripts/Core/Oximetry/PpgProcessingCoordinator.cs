@@ -34,9 +34,10 @@ namespace Ibit.Core.Oximetry
     /// <summary>
     /// Receives PITACO 2.4 optical JSON through the existing serial event.
     /// Bootstrapped persistently by PitacoConnectionManager (no extra COM).
-    /// Optical contact is required before an 8-second measurement window
-    /// can accumulate. Firmware G1 remains diagnostic-only (not consumed here).
-    /// The independent placement monitor still observes all contact events.
+    /// Optical contact and the latest fresh firmware G1 PASS are both required
+    /// before publishing experimental estimates. G1 runs every 5 seconds;
+    /// this coordinator never reimplements its signal-quality calculations.
+    /// The placement monitor keeps receiving every optical-contact observation.
     /// </summary>
     public sealed class PpgProcessingCoordinator : MonoBehaviour
     {
@@ -51,6 +52,35 @@ namespace Ibit.Core.Oximetry
         private sealed class SqiPayload
         {
             public bool contact;
+            // Frame-specific G1 reason is useful for detecting firmware resets.
+            // Do not deserialize sample.sqi.g1 here: it can be JSON null.
+            public int reason;
+        }
+
+        // Only type="g1" frames contain a non-null boolean sqi.g1.
+        // A separate type avoids treating sample.sqi.g1=null as false.
+        [Serializable]
+        private sealed class Gate01SqiPayload
+        {
+            public bool g1;
+            public int reason;
+            public int samples;
+        }
+
+        [Serializable]
+        private sealed class Gate01Frame
+        {
+            public string type;
+            public long t_ms;
+            public Gate01SqiPayload sqi;
+        }
+
+        private enum Gate01State
+        {
+            Waiting,
+            Passed,
+            Failed,
+            Stale
         }
 
         [Serializable]
@@ -81,6 +111,28 @@ namespace Ibit.Core.Oximetry
         private long invalidSampleFrames;
         private string lastJsonType = "nenhum";
         private const uint RecalculationPeriodMs = 400;
+        // 5-second G1 cadence plus 1.5 s of delivery tolerance.
+        // Experimental parameter; reevaluate with real hardware logs.
+        private const uint Gate01MaxAgeMs = 6500;
+        private const float Gate01MaxAgeSeconds = 6.5f;
+        private const int Gate01MinimumSamples = 50;
+
+        private Gate01State gate01State = Gate01State.Waiting;
+        private bool gate01Received;
+        private uint lastGate01TimeMs;
+        private float lastGate01ArrivalAt = -1f;
+        private int lastGate01Reason = -1;
+        private int lastGate01Samples;
+        private long gate01Frames;
+        private long rejectedGate01Frames;
+        private long blockedByGate01;
+
+        public string Gate01Status => gate01State.ToString();
+        public int LastGate01Reason => lastGate01Reason;
+        public int LastGate01Samples => lastGate01Samples;
+        public bool Gate01Approved => gate01State == Gate01State.Passed &&
+            gate01Received && lastGate01ArrivalAt >= 0f &&
+            Time.unscaledTime - lastGate01ArrivalAt <= Gate01MaxAgeSeconds;
 
         public PpgMeasurement LastMeasurement { get; private set; }
         public bool OpticalContactConfirmed { get; private set; }
@@ -113,6 +165,11 @@ namespace Ibit.Core.Oximetry
                 ResetMeasurements("Sem amostras PPG recentes");
             }
 
+            if (gate01State == Gate01State.Passed &&
+                lastGate01ArrivalAt >= 0f &&
+                Time.unscaledTime - lastGate01ArrivalAt > Gate01MaxAgeSeconds)
+                MarkGate01Stale();
+
             // Diagnostico de toda a cadeia: recepcao, contato, janela e
             // estimativas. Antes so havia log apos um calculo bem-sucedido.
             if (logDiagnostics && Time.unscaledTime >= nextLogTime)
@@ -129,6 +186,12 @@ namespace Ibit.Core.Oximetry
                     " | amostraInvalida=" + invalidSampleFrames +
                     " | ultimoTipo=" + lastJsonType +
                     " | gateContato=ATIVADO" +
+                    " | G1=" + gate01State +
+                    " | G1_reason=" + lastGate01Reason +
+                    " | G1_samples=" + lastGate01Samples +
+                    " | G1_frames=" + gate01Frames +
+                    " | G1_invalidos=" + rejectedGate01Frames +
+                    " | G1_bloqueios=" + blockedByGate01 +
                     " | contato=" + OpticalContactConfirmed +
                     " | buffer=" + buffer.Count +
                     " | estado=" + (measurement != null ? measurement.Status : "sem resultado") +
@@ -170,18 +233,104 @@ namespace Ibit.Core.Oximetry
             ResetMeasurements("PITACO 2.4 desconectado");
         }
 
-        private void ResetMeasurements(string status)
+        private void InvalidatePpgWindow(string status)
         {
             buffer.Clear();
-            OpticalContactConfirmed = false;
             hasPreviousProcessingTime = false;
-            lastSampleReceivedAt = -1f;
             LastMeasurement = new PpgMeasurement(0, 0, null, null, null, 0, status);
+        }
+
+        private void ResetGate01()
+        {
+            gate01State = Gate01State.Waiting;
+            gate01Received = false;
+            lastGate01TimeMs = 0;
+            lastGate01ArrivalAt = -1f;
+            lastGate01Reason = -1;
+            lastGate01Samples = 0;
+        }
+
+        private void ResetMeasurements(string status)
+        {
+            InvalidatePpgWindow(status);
+            OpticalContactConfirmed = false;
+            lastSampleReceivedAt = -1f;
+            ResetGate01();
+        }
+
+        private void MarkGate01Stale()
+        {
+            if (gate01State != Gate01State.Passed) return;
+            gate01State = Gate01State.Stale;
+            // Suspend publication but retain collected samples until next G1
+            // decision; no stale measurement may remain visible in the HUD.
+            hasPreviousProcessingTime = false;
+            LastMeasurement = new PpgMeasurement(0, 0, null, null, null, 0,
+                "G1 expirado: aguardando nova avaliacao");
+        }
+
+        private void ReceiveGate01(string json)
+        {
+            Gate01Frame result;
+            try { result = JsonUtility.FromJson<Gate01Frame>(json); }
+            catch (ArgumentException)
+            {
+                rejectedGate01Frames++;
+                return;
+            }
+            if (result == null || result.sqi == null || result.t_ms < 0 ||
+                result.t_ms > uint.MaxValue)
+            {
+                rejectedGate01Frames++;
+                return;
+            }
+
+            uint deviceMs = (uint)result.t_ms;
+            // Compare modulo 2^32 to handle millis() wrap-around without
+            // accepting replayed/out-of-order results from this device session.
+            if (gate01Received &&
+                unchecked((int)(deviceMs - lastGate01TimeMs)) <= 0)
+            {
+                rejectedGate01Frames++;
+                return;
+            }
+
+            gate01Received = true;
+            lastGate01TimeMs = deviceMs;
+            lastGate01ArrivalAt = Time.unscaledTime;
+            lastGate01Reason = result.sqi.reason;
+            lastGate01Samples = result.sqi.samples;
+            gate01Frames++;
+
+            bool approved = result.sqi.g1 && result.sqi.reason == 0 &&
+                result.sqi.samples >= Gate01MinimumSamples;
+            gate01State = approved ? Gate01State.Passed : Gate01State.Failed;
+            if (!approved)
+            {
+                // A failed 5-second period must never leave the previous
+                // 8-second result on the player's HUD.
+                InvalidatePpgWindow("G1 reprovado: reason=" + lastGate01Reason);
+            }
+        }
+
+        private bool IsGate01ApprovedForSample(uint sampleTimeMs)
+        {
+            if (gate01State != Gate01State.Passed || !gate01Received)
+                return false;
+            if (lastGate01ArrivalAt < 0f ||
+                Time.unscaledTime - lastGate01ArrivalAt > Gate01MaxAgeSeconds ||
+                unchecked(sampleTimeMs - lastGate01TimeMs) > Gate01MaxAgeMs)
+            {
+                MarkGate01Stale();
+                return false;
+            }
+            return true;
         }
 
         private void ReceiveJson(string json)
         {
-            // G1 frames are intentionally ignored in this first, SQI-free prototype.
+            // Handle firmware G1 window events and optical sample frames
+            // independently; no second USB stream or software G1 calculation.
             if (string.IsNullOrEmpty(json)) return;
             jsonCallbacksReceived++;
 
@@ -202,6 +351,11 @@ namespace Ibit.Core.Oximetry
             }
 
             lastJsonType = string.IsNullOrEmpty(frame.type) ? "sem-type" : frame.type;
+            if (frame.type == "g1")
+            {
+                ReceiveGate01(json);
+                return;
+            }
             if (frame.type != "sample" || frame.ppg == null)
             {
                 nonSampleJsonFrames++;
@@ -227,6 +381,16 @@ namespace Ibit.Core.Oximetry
             }
             OpticalContactConfirmed = true;
 
+            // Firmware resets the current G1 evaluation to reason=1 on a
+            // new sampling session. Revoke an older PASS even if USB stayed
+            // connected. Never treat the null per-sample g1 as a boolean.
+            if (gate01State == Gate01State.Passed &&
+                frame.sqi != null && frame.sqi.reason != 0)
+            {
+                ResetGate01();
+                InvalidatePpgWindow("G1 reiniciado/invalidado pelo firmware");
+            }
+
             PpgSample sample;
             if (!PpgSample.TryCreate(frame.seq, frame.t_ms,
                 frame.ppg.red, frame.ppg.ir, out sample))
@@ -244,6 +408,19 @@ namespace Ibit.Core.Oximetry
                 hasPreviousProcessingTime = false;
                 LastMeasurement = new PpgMeasurement(sample.TimeMs, 0,
                     null, null, null, 0, "Janela reiniciada: sequencia/timestamp");
+            }
+
+            if (!IsGate01ApprovedForSample(sample.TimeMs))
+            {
+                blockedByGate01++;
+                string reason = gate01State == Gate01State.Waiting
+                    ? "Aguardando aprovacao G1"
+                    : gate01State == Gate01State.Failed
+                        ? "G1 reprovado: reason=" + lastGate01Reason
+                        : "G1 expirado: aguardando nova avaliacao";
+                LastMeasurement = new PpgMeasurement(sample.TimeMs, 0,
+                    null, null, null, 0, reason);
+                return;
             }
 
             if (hasPreviousProcessingTime &&
