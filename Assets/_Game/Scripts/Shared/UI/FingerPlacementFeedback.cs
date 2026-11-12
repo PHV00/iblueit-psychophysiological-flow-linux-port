@@ -24,6 +24,7 @@ namespace Ibit.Core.Oximetry.Placement
         private Text resumeText;
         private Font font;
         private bool previousLegacyPause;
+        private bool previousCanResume;
 
         private void OnEnable()
         {
@@ -72,9 +73,12 @@ namespace Ibit.Core.Oximetry.Placement
             // GameIsPaused does not change and OnGamePause is not emitted:
             // detect the ownership change explicitly and yield visual priority.
             bool legacyPause = GameManager.HasLegacyPauseRequest;
-            if (legacyPause != previousLegacyPause)
+            bool canResume = pause != null && pause.CanResume;
+            if (legacyPause != previousLegacyPause ||
+                canResume != previousCanResume)
             {
                 previousLegacyPause = legacyPause;
+                previousCanResume = canResume;
                 Refresh();
             }
         }

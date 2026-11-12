@@ -42,6 +42,15 @@ public class FingerPlacementTests
         state.ObserveContact(8.11f, true);
         Assert.AreEqual(FingerPlacementState.Normal, state.Tick(8.11f));
         Assert.IsTrue(state.RecoveryReady);
+        // A brief new loss must immediately disable resuming, even before
+        // it is long enough to raise the yellow placement warning.
+        state.ObserveContact(8.2f, false);
+        Assert.IsFalse(state.RecoveryReady);
+        state.ObserveContact(8.3f, true);
+        Assert.AreEqual(FingerPlacementState.Recovering, state.Tick(8.3f));
+        state.ObserveContact(10.31f, true);
+        Assert.AreEqual(FingerPlacementState.Normal, state.Tick(10.31f));
+        Assert.IsTrue(state.RecoveryReady);
         state.AcknowledgeResume();
         Assert.IsFalse(state.RecoveryReady);
     }

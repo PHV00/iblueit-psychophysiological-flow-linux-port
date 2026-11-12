@@ -40,7 +40,9 @@ namespace Ibit.Core.Oximetry.Placement
         public bool SessionActive => active;
         public bool HasContact => connected && received && contact;
         public bool EverConnected { get; private set; }
-        public bool RecoveryReady => pauseWasRequired && State == FingerPlacementState.Normal;
+        // Never allow resume if the finger vanished during the warning grace period.
+        public bool RecoveryReady => pauseWasRequired && HasContact &&
+            State == FingerPlacementState.Normal;
 
         public void Configure(float warning, float critical, float pause,
             float recovery, float timeout)
