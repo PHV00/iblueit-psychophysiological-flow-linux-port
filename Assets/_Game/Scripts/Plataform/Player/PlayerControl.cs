@@ -64,20 +64,27 @@ namespace Ibit.Plataform
             {
                 return pitaco24OxiSourceActive
                     ? FormatPitaco24Oximetry(pitaco24DisplayedBpm,
-                        pitaco24DisplayedSpO2)
+                        pitaco24DisplayedSpO2,
+                        pitaco24PpgCoordinator != null &&
+                        pitaco24PpgCoordinator.OpticalContactConfirmed)
                     : $"HR: {HRValue} bpm\nSPO2: {SPO2Value} %";
             }
         }
 
         // Shared formatting lives in Player, not in an extra hub/formatter.
         // A missing value is never converted to a misleading numeric zero.
-        public static string FormatPitaco24Oximetry(double? bpm, double? spo2Demo)
+        public static string FormatPitaco24Oximetry(double? bpm, double? spo2Demo,
+            bool opticalContact = true)
         {
             string hr = bpm.HasValue
                 ? bpm.Value.ToString("F1", CultureInfo.InvariantCulture) : "--";
             string spo2 = spo2Demo.HasValue
                 ? spo2Demo.Value.ToString("F1", CultureInfo.InvariantCulture) : "--";
-            return $"HR [2.4]: {hr} bpm\nSpO2 DEMO: {spo2} %";
+            // Only two lines: preserve the size of the original Unity HUD.
+            // Without contact, the numbers are UNVERIFIED TEST CANDIDATES.
+            return opticalContact
+                ? $"HR [2.4]: {hr} bpm\nSpO2 DEMO: {spo2} %"
+                : $"BPM CAND. S/CONTATO: {hr}\nSpO2 DEMO CAND.: {spo2} %";
         }
 
         private void UpdatePitaco24Oximetry()
@@ -113,12 +120,12 @@ namespace Ibit.Plataform
                 ? pitaco24PpgCoordinator.LastMeasurement : null;
 
             if (pitaco24PpgCoordinator == null ||
-                !pitaco24PpgCoordinator.OpticalContactConfirmed ||
                 sample == null ||
                 (!sample.BpmEstimate.HasValue && !sample.SpO2DemoPercent.HasValue))
             {
-                // Missing contact, a reset window, timeouts or disconnection
-                // immediately hide the old readings; never display stale data.
+                // Missing or invalid candidate, timeout and disconnection
+                // immediately hide old readings. Contact is NOT a gate
+                // in this experimental branch.
                 pitaco24DisplayedBpm = null;
                 pitaco24DisplayedSpO2 = null;
                 pitaco24VisualPublished = false;

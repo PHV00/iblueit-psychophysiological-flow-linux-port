@@ -34,7 +34,8 @@ namespace Ibit.Core.Oximetry
     /// <summary>
     /// Receives PITACO 2.4 optical JSON through the existing serial event.
     /// Bootstrapped persistently by PitacoConnectionManager (no extra COM).
-    /// Contact absence invalidates the window; G1 remains diagnostic only.
+    /// EXPERIMENTAL: optical contact and G1 are diagnostics only in this branch.
+    /// The mathematical/continuity checks still guard candidate estimates.
     /// </summary>
     public sealed class PpgProcessingCoordinator : MonoBehaviour
     {
@@ -123,6 +124,7 @@ namespace Ibit.Core.Oximetry
                     " | semContato=" + missingContactFrames +
                     " | amostraInvalida=" + invalidSampleFrames +
                     " | ultimoTipo=" + lastJsonType +
+                    " | gateContato=DESATIVADO_TESTE" +
                     " | contato=" + OpticalContactConfirmed +
                     " | buffer=" + buffer.Count +
                     " | estado=" + (measurement != null ? measurement.Status : "sem resultado") +
@@ -204,19 +206,15 @@ namespace Ibit.Core.Oximetry
 
             receivedSampleFrames++;
 
-            // Device reports contact explicitly. This is a basic display safety
-            // condition, NOT G1/SQI approval and NOT clinical signal validation.
-            // Reset the window so a newly placed finger must supply 8 s of data.
+            // EXPERIMENTAL WITHOUT CONTACT GATE: the firmware provides
+            // sqi.contact, but it does NOT approve/reject the signal here.
+            // Keep contact as diagnostic metadata and always continue with
+            // structural and mathematical checks on RED/IR.
+            // G1 is also diagnostic only, as it already was in Marco 0.5.
             bool hasContact = frame.sqi != null && frame.sqi.contact;
+            OpticalContactConfirmed = hasContact;
             if (!hasContact)
-            {
                 missingContactFrames++;
-                if (OpticalContactConfirmed || LastMeasurement == null ||
-                    LastMeasurement.Status != "Sem contato optico")
-                    ResetMeasurements("Sem contato optico");
-                return;
-            }
-            OpticalContactConfirmed = true;
 
             PpgSample sample;
             if (!PpgSample.TryCreate(frame.seq, frame.t_ms,
@@ -259,7 +257,9 @@ namespace Ibit.Core.Oximetry
                 hasBpm ? (double?)bpm : null,
                 hasSpO2 ? (double?)spo2Demo : null,
                 hasSpO2 ? (double?)ratio : null,
-                autocorrelation, "EXPERIMENTAL - NAO CALIBRADO");
+                autocorrelation, hasContact
+                    ? "CANDIDATO EXPERIMENTAL - CONTATO REPORTADO"
+                    : "CANDIDATO EXPERIMENTAL - SEM CONTATO");
             OnMeasurement?.Invoke(LastMeasurement);
 
 

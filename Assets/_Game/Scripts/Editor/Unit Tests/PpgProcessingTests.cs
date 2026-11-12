@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using Ibit.Core.Oximetry;
 using Ibit.Plataform;
 using NUnit.Framework;
+using UnityEngine;
 
 public class PpgProcessingTests
 {
@@ -143,6 +145,54 @@ public class PpgProcessingTests
         Assert.IsNotNull(typeof(Ibit.Plataform.Player).GetProperty("OximetryHudText"));
         Assert.IsNotNull(typeof(Ibit.WaterGame.Player).GetProperty("OximetryHudText"));
         Assert.IsNotNull(typeof(Ibit.CakeGame.Player).GetProperty("OximetryHudText"));
+    }
+
+    [Test]
+    public void ContactFalseDoesNotBlockCandidateEstimatorsInExperimentalBranch()
+    {
+        // A synthetic pulsatile signal deliberately reports NO finger contact.
+        // This test asserts separation of math from firmware quality policy,
+        // NOT measurement accuracy or clinical permission to display it.
+        var gameObject = new GameObject("PPG contact-independent test");
+        try
+        {
+            var coordinator = gameObject.AddComponent<PpgProcessingCoordinator>();
+            var receive = typeof(PpgProcessingCoordinator).GetMethod(
+                "ReceiveJson", BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.IsNotNull(receive);
+            for (int i = 0; i < 210; ++i)
+            {
+                double t = i * 0.040;
+                double wave = Math.Sin(2.0 * Math.PI * 75.0 * t / 60.0);
+                int red = (int)Math.Round(60000.0 + 500.0 * wave);
+                int ir = (int)Math.Round(80000.0 + 1000.0 * wave);
+                string json = "{\"type\":\"sample\",\"seq\":" + i +
+                    ",\"t_ms\":" + (i * 40) +
+                    ",\"ppg\":{\"red\":" + red + ",\"ir\":" + ir +
+                    "},\"sqi\":{\"contact\":false}}";
+                receive.Invoke(coordinator, new object[] { json });
+            }
+            Assert.IsFalse(coordinator.OpticalContactConfirmed);
+            Assert.IsNotNull(coordinator.LastMeasurement);
+            Assert.IsTrue(coordinator.LastMeasurement.BpmEstimate.HasValue);
+            Assert.IsTrue(coordinator.LastMeasurement.SpO2DemoPercent.HasValue);
+            StringAssert.Contains("SEM CONTATO", coordinator.LastMeasurement.Status);
+            StringAssert.Contains("CAND.", Player.FormatPitaco24Oximetry(
+                coordinator.LastMeasurement.BpmEstimate,
+                coordinator.LastMeasurement.SpO2DemoPercent, false));
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(gameObject);
+        }
+    }
+
+    [Test]
+    public void WithoutContactHudLabelsNumbersAsUnverifiedCandidates()
+    {
+        string text = Player.FormatPitaco24Oximetry(75.1, 95.0, false);
+        StringAssert.Contains("BPM CAND. S/CONTATO: 75.1", text);
+        StringAssert.Contains("SpO2 DEMO CAND.: 95.0 %", text);
     }
 
     [Test]
