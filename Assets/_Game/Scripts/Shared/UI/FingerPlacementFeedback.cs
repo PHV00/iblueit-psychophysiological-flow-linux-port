@@ -23,6 +23,8 @@ namespace Ibit.Core.Oximetry.Placement
         private Button resumeButton;
         private Text resumeText;
         private Font font;
+        // A missing builtin font must not trigger an exception every frame.
+        private bool fontUnavailable;
         private bool previousLegacyPause;
         private bool previousCanResume;
 
@@ -53,6 +55,7 @@ namespace Ibit.Core.Oximetry.Placement
         {
             if (root != null) Destroy(root);
             root = null;
+            fontUnavailable = false; // One new attempt per scene, never per frame.
             CreateOverlayIfNeeded(scene);
         }
 
@@ -88,9 +91,29 @@ namespace Ibit.Core.Oximetry.Placement
             if (monitor == null || !monitor.SessionActive) return;
             if (scene.name != "Plataform" && scene.name != "WaterGame" &&
                 scene.name != "CakeGame") return;
-            if (root != null) return;
+            if (root != null || fontUnavailable) return;
 
-            font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            // Unity versions using LegacyRuntime.ttf reject the old Arial.ttf
+            // builtin resource name. Load before creating any UI objects.
+            try
+            {
+                font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            }
+            catch (System.ArgumentException ex)
+            {
+                fontUnavailable = true;
+                Debug.LogError("[FingerPlacement] Nao foi possivel carregar a fonte da HUD: " +
+                    ex.Message + ". Nova tentativa apenas ao trocar de cena.");
+                return;
+            }
+            if (font == null)
+            {
+                fontUnavailable = true;
+                Debug.LogError("[FingerPlacement] LegacyRuntime.ttf indisponivel; HUD desativada " +
+                    "nesta cena para evitar repeticao de erros.");
+                return;
+            }
+
             root = new GameObject("Finger Placement HUD (runtime)",
                 typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler),
                 typeof(GraphicRaycaster));
