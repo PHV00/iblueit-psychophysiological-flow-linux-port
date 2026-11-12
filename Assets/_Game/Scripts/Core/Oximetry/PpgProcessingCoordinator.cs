@@ -88,6 +88,9 @@ namespace Ibit.Core.Oximetry
         public long JsonCallbacksReceived => jsonCallbacksReceived;
         public long ReceivedSampleFrames => receivedSampleFrames;
         public event Action<PpgMeasurement> OnMeasurement;
+        // Independent of 8-second processing: one contact observation per
+        // sample. A missing sqi object is NOT treated as proof of finger-off.
+        public event Action<bool> OnOpticalContactSample;
 
         private void OnEnable()
         {
@@ -213,6 +216,8 @@ namespace Ibit.Core.Oximetry
             // G1 is also diagnostic only, as it already was in Marco 0.5.
             bool hasContact = frame.sqi != null && frame.sqi.contact;
             OpticalContactConfirmed = hasContact;
+            if (frame.sqi != null)
+                OnOpticalContactSample?.Invoke(hasContact);
             if (!hasContact)
                 missingContactFrames++;
 

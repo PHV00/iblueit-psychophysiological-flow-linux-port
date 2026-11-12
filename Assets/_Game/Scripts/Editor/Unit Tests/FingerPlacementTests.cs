@@ -18,8 +18,11 @@ public class FingerPlacementTests
         var state = Start(false);
         state.ObserveContact(0f, false);
         Assert.AreEqual(FingerPlacementState.Normal, state.Tick(0.5f));
+        state.ObserveContact(1f, false);
         Assert.AreEqual(FingerPlacementState.Warning, state.Tick(1f));
+        state.ObserveContact(3f, false);
         Assert.AreEqual(FingerPlacementState.Critical, state.Tick(3f));
+        state.ObserveContact(6f, false);
         Assert.AreEqual(FingerPlacementState.Critical, state.Tick(6f));
         Assert.IsFalse(state.RecoveryReady);
     }
@@ -29,6 +32,7 @@ public class FingerPlacementTests
     {
         var state = Start(true);
         state.ObserveContact(0f, false);
+        state.ObserveContact(6f, false);
         Assert.AreEqual(FingerPlacementState.PauseRequired, state.Tick(6f));
         state.ObserveContact(6.1f, true);
         Assert.AreEqual(FingerPlacementState.Recovering, state.Tick(6.1f));
@@ -81,6 +85,7 @@ public class FingerPlacementTests
     {
         var state = Start(true);
         state.ObserveContact(0f, false);
+        state.ObserveContact(6f, false);
         state.Tick(6f);
         state.SetConnected(false);
         Assert.AreEqual(FingerPlacementState.DeviceDisconnected, state.Tick(6.1f));

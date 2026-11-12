@@ -55,9 +55,7 @@ namespace Ibit.Plataform.UI
             if (_resultPanel.activeSelf)
                 return;
 
-            if (GameManager.GameIsPaused)
-                return;
-
+            // Register a manual pause even if placement has already paused.
             _helpPanel.SetActive(true);
             _pauseMenu.SetActive(true);
             GameManager.PauseGame();
@@ -68,9 +66,7 @@ namespace Ibit.Plataform.UI
             if (_resultPanel.activeSelf)
                 return;
 
-            if (GameManager.GameIsPaused)
-                return;
-
+            // Preserve ownership when other pause reasons are active.
             GameManager.PauseGame();
         }
 
@@ -79,9 +75,7 @@ namespace Ibit.Plataform.UI
             if (_resultPanel.activeSelf)
                 return;
 
-            if (GameManager.GameIsPaused)
-                return;
-
+            // Legacy security panel must acquire its own pause hold.
             GameManager.PauseGame();
         }
 
