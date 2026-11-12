@@ -13,9 +13,13 @@ dispositivo medico ou avaliador de risco fisiologico. A SpO2 continua
 os alertas clinicos, as recompensas ou o DeepDDA.
 
 O firmware G1, a serial USB e os calculos BPM/SpO2 nao sao alterados.
-A branch continua **experimental sem gate de contato para estimadores**.
-A orientacao de dedo depende apenas de `sqi.contact` recebido a cada JSON,
-independentemente de haver resultados numericos.
+O Unity voltou a **exigir contato optico** (`sqi.contact == true`) para
+aceitar amostras nas estimativas BPM/SpO2 DEMO. Na ausencia de contato,
+o buffer e os resultados sao limpos. Isso e uma protecao basica, **nao
+equivale a um SQI fisiologico completo**; a aprovacao de `sqi.g1` do
+firmware continua nao consumida pelo Unity.
+O monitor recebe `sqi.contact` a cada JSON, **antes** do bloqueio de
+estimativas, portanto os avisos continuam sem esperar 8 segundos.
 
 ## Componentes
 

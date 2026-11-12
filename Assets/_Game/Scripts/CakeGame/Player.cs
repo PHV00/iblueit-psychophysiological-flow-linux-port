@@ -40,9 +40,7 @@ namespace Ibit.CakeGame
             {
                 return pitaco24OxiSourceActive
                     ? Ibit.Plataform.Player.FormatPitaco24Oximetry(
-                        pitaco24DisplayedBpm, pitaco24DisplayedSpO2,
-                        pitaco24PpgCoordinator != null &&
-                        pitaco24PpgCoordinator.OpticalContactConfirmed)
+                        pitaco24DisplayedBpm, pitaco24DisplayedSpO2)
                     : $"HR: {HRValue} bpm\nSPO2: {SPO2Value} %";
             }
         }
@@ -76,6 +74,7 @@ namespace Ibit.CakeGame
                 ? pitaco24PpgCoordinator.LastMeasurement : null;
 
             if (pitaco24PpgCoordinator == null ||
+                !pitaco24PpgCoordinator.OpticalContactConfirmed ||
                 measurement == null ||
                 (!measurement.BpmEstimate.HasValue &&
                  !measurement.SpO2DemoPercent.HasValue))

@@ -1,3 +1,9 @@
+> **Experimento historico (desativado na branch de desenvolvimento).**
+> O bloqueio por `sqi.contact` do Unity foi restaurado apos este estudo.
+> Este documento permanece como registro do experimento sem dedo.
+> Versao preservada em `experiments/ppg-before-contact-restoration`.
+> Para o comportamento atual, veja `docs/architecture/FINGER_PLACEMENT_MONITOR.md`.
+
 # Experimento — estimadores PPG sem bloqueio por SQI/contato (apos Marco 0.5)
 
 **Branch principal de experimentacao:** `feature/ppg-csharp-bpm-spo2-mvp`  

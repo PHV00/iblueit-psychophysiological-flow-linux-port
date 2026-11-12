@@ -55,6 +55,12 @@ namespace Ibit.Plataform.UI
                     return;
                 }
 
+                if (!coordinator.OpticalContactConfirmed)
+                {
+                    hud.text = "PITACO 2.4: conectado\nPPG: sem contato optico";
+                    return;
+                }
+
                 if (plr == null)
                 {
                     hud.text = "PITACO 2.4: conectado\nPPG: aguardando Player";

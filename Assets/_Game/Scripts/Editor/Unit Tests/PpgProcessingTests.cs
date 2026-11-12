@@ -148,51 +148,67 @@ public class PpgProcessingTests
     }
 
     [Test]
-    public void ContactFalseDoesNotBlockCandidateEstimatorsInExperimentalBranch()
+    public void NoContactSuppressesSyntheticBpmAndSpo2UntilEightSecondsOfContact()
     {
-        // A synthetic pulsatile signal deliberately reports NO finger contact.
-        // This test asserts separation of math from firmware quality policy,
-        // NOT measurement accuracy or clinical permission to display it.
-        var gameObject = new GameObject("PPG contact-independent test");
+        var gameObject = new GameObject("PPG restored contact gate test");
         try
         {
             var coordinator = gameObject.AddComponent<PpgProcessingCoordinator>();
             var receive = typeof(PpgProcessingCoordinator).GetMethod(
                 "ReceiveJson", BindingFlags.NonPublic | BindingFlags.Instance);
             Assert.IsNotNull(receive);
-            for (int i = 0; i < 210; ++i)
+            int contactEvents = 0;
+            coordinator.OnOpticalContactSample += value => contactEvents++;
+            // 8.4 s of perfectly periodic optical samples, but NO finger.
+            for (int i = 0; i < 210; i++)
             {
-                double t = i * 0.040;
-                double wave = Math.Sin(2.0 * Math.PI * 75.0 * t / 60.0);
-                int red = (int)Math.Round(60000.0 + 500.0 * wave);
-                int ir = (int)Math.Round(80000.0 + 1000.0 * wave);
+                double phase = 2.0 * Math.PI * 75.0 * i * 0.040 / 60.0;
+                int red = (int)Math.Round(60000 + 500 * Math.Sin(phase));
+                int ir = (int)Math.Round(80000 + 1000 * Math.Sin(phase));
                 string json = "{\"type\":\"sample\",\"seq\":" + i +
                     ",\"t_ms\":" + (i * 40) +
                     ",\"ppg\":{\"red\":" + red + ",\"ir\":" + ir +
                     "},\"sqi\":{\"contact\":false}}";
                 receive.Invoke(coordinator, new object[] { json });
             }
+            Assert.AreEqual(210, contactEvents, "Placement monitor must still receive events.");
             Assert.IsFalse(coordinator.OpticalContactConfirmed);
-            Assert.IsNotNull(coordinator.LastMeasurement);
+            Assert.IsFalse(coordinator.LastMeasurement.BpmEstimate.HasValue);
+            Assert.IsFalse(coordinator.LastMeasurement.SpO2DemoPercent.HasValue);
+            Assert.AreEqual("Sem contato optico", coordinator.LastMeasurement.Status);
+
+            // A fresh, uninterrupted 8-second contact window is required.
+            for (int i = 210; i < 420; i++)
+            {
+                double phase = 2.0 * Math.PI * 75.0 * i * 0.040 / 60.0;
+                int red = (int)Math.Round(60000 + 500 * Math.Sin(phase));
+                int ir = (int)Math.Round(80000 + 1000 * Math.Sin(phase));
+                string json = "{\"type\":\"sample\",\"seq\":" + i +
+                    ",\"t_ms\":" + (i * 40) +
+                    ",\"ppg\":{\"red\":" + red + ",\"ir\":" + ir +
+                    "},\"sqi\":{\"contact\":true}}";
+                receive.Invoke(coordinator, new object[] { json });
+            }
+            Assert.IsTrue(coordinator.OpticalContactConfirmed);
             Assert.IsTrue(coordinator.LastMeasurement.BpmEstimate.HasValue);
             Assert.IsTrue(coordinator.LastMeasurement.SpO2DemoPercent.HasValue);
-            StringAssert.Contains("SEM CONTATO", coordinator.LastMeasurement.Status);
-            StringAssert.Contains("CAND.", Player.FormatPitaco24Oximetry(
-                coordinator.LastMeasurement.BpmEstimate,
-                coordinator.LastMeasurement.SpO2DemoPercent, false));
+
+            // A single contact-loss frame must immediately clear both numbers.
+            receive.Invoke(coordinator, new object[]
+            {
+                "{\"type\":\"sample\",\"seq\":420,\"t_ms\":16800," +
+                "\"ppg\":{\"red\":60000,\"ir\":80000}," +
+                "\"sqi\":{\"contact\":false}}"
+            });
+            Assert.IsFalse(coordinator.OpticalContactConfirmed);
+            Assert.IsFalse(coordinator.LastMeasurement.BpmEstimate.HasValue);
+            Assert.IsFalse(coordinator.LastMeasurement.SpO2DemoPercent.HasValue);
+            Assert.AreEqual(421, contactEvents);
         }
         finally
         {
             UnityEngine.Object.DestroyImmediate(gameObject);
         }
-    }
-
-    [Test]
-    public void WithoutContactHudLabelsNumbersAsUnverifiedCandidates()
-    {
-        string text = Player.FormatPitaco24Oximetry(75.1, 95.0, false);
-        StringAssert.Contains("BPM CAND. S/CONTATO: 75.1", text);
-        StringAssert.Contains("SpO2 DEMO CAND.: 95.0 %", text);
     }
 
     [Test]
