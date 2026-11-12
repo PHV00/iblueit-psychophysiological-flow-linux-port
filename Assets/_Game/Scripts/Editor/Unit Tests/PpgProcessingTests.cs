@@ -188,8 +188,14 @@ public class PpgProcessingTests
                     ",\"ppg\":{\"red\":" + red + ",\"ir\":" + ir +
                     "},\"sqi\":{\"contact\":true}}";
                 receive.Invoke(coordinator, new object[] { json });
+                // New continuous-contact period after the initial no-finger
+                // interval: firmware G1 first evaluates this window at 13.4 s.
+                if (i == 335)
+                    ReceiveG1TestJson(coordinator,
+                        MakeGate01TestJson(13400, true, 0));
             }
             Assert.IsTrue(coordinator.OpticalContactConfirmed);
+            Assert.AreEqual("Passed", coordinator.Gate01Status);
             Assert.IsTrue(coordinator.LastMeasurement.BpmEstimate.HasValue);
             Assert.IsTrue(coordinator.LastMeasurement.SpO2DemoPercent.HasValue);
 
@@ -201,6 +207,7 @@ public class PpgProcessingTests
                 "\"sqi\":{\"contact\":false}}"
             });
             Assert.IsFalse(coordinator.OpticalContactConfirmed);
+            Assert.AreEqual("Waiting", coordinator.Gate01Status);
             Assert.IsFalse(coordinator.LastMeasurement.BpmEstimate.HasValue);
             Assert.IsFalse(coordinator.LastMeasurement.SpO2DemoPercent.HasValue);
             Assert.AreEqual(421, contactEvents);
@@ -290,7 +297,7 @@ public class PpgProcessingTests
         try
         {
             var coordinator = gameObject.AddComponent<PpgProcessingCoordinator>();
-            for (int i = 0; i < 210; i++)
+            for (int i = 0; i < 250; i++)
             {
                 ReceiveG1TestJson(coordinator, MakeGate01TestSample(i, true));
                 if (i == 125)
@@ -298,6 +305,7 @@ public class PpgProcessingTests
                         MakeGate01TestJson(5000, true, 0));
             }
             Assert.IsTrue(coordinator.LastMeasurement.SpO2DemoPercent.HasValue);
+            // Firmware emits the failed five-second result after sample 249.
             ReceiveG1TestJson(coordinator,
                 MakeGate01TestJson(10000, false, 4));
             Assert.AreEqual("Failed", coordinator.Gate01Status);
@@ -307,14 +315,16 @@ public class PpgProcessingTests
             Assert.IsFalse(coordinator.LastMeasurement.SpO2DemoPercent.HasValue);
 
             // Buffer was reset: a fresh PASS can restore later measurements.
-            for (int i = 210; i < 420; i++)
+            for (int i = 250; i < 460; i++)
             {
-                ReceiveG1TestJson(coordinator, MakeGate01TestSample(i, true));
+                ReceiveG1TestJson(coordinator,
+                    MakeGate01TestSample(i, true, i <= 375 ? 4 : 0));
                 if (i == 375)
                     ReceiveG1TestJson(coordinator,
                         MakeGate01TestJson(15000, true, 0));
             }
             Assert.AreEqual("Passed", coordinator.Gate01Status);
+            // A complete new 8-second PPG window followed the failed G1.
             Assert.IsTrue(coordinator.LastMeasurement.SpO2DemoPercent.HasValue);
         }
         finally { UnityEngine.Object.DestroyImmediate(gameObject); }

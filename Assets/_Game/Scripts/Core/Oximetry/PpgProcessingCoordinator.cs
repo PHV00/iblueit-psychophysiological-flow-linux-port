@@ -191,7 +191,7 @@ namespace Ibit.Core.Oximetry
                     " | G1_samples=" + lastGate01Samples +
                     " | G1_frames=" + gate01Frames +
                     " | G1_invalidos=" + rejectedGate01Frames +
-                    " | G1_bloqueios=" + blockedByGate01 +
+                    " | G1_amostras_bloqueadas=" + blockedByGate01 +
                     " | contato=" + OpticalContactConfirmed +
                     " | buffer=" + buffer.Count +
                     " | estado=" + (measurement != null ? measurement.Status : "sem resultado") +
