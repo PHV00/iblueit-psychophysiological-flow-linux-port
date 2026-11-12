@@ -1,6 +1,9 @@
+using System.Reflection;
+using Ibit.Core.Oximetry;
 using Ibit.Core.Oximetry.Placement;
 using Ibit.Core.Game;
 using NUnit.Framework;
+using UnityEngine;
 
 public class FingerPlacementTests
 {
@@ -116,6 +119,50 @@ public class FingerPlacementTests
         {
             GameManager.ReleaseFingerPlacementPause();
             GameManager.UnPauseGame();
+        }
+    }
+
+
+    [Test]
+    public void CoordinatorPublishesContactBeforeAnEightSecondEstimateExists()
+    {
+        var go = new GameObject("PPG contact event test");
+        try
+        {
+            var coordinator = go.AddComponent<PpgProcessingCoordinator>();
+            var method = typeof(PpgProcessingCoordinator).GetMethod(
+                "ReceiveJson", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsNotNull(method);
+            int events = 0;
+            bool lastContact = true;
+            coordinator.OnOpticalContactSample += value =>
+            {
+                events++;
+                lastContact = value;
+            };
+
+            method.Invoke(coordinator, new object[]
+            {
+                "{\"type\":\"sample\",\"seq\":1,\"t_ms\":40," +
+                "\"ppg\":{\"red\":50000,\"ir\":60000}," +
+                "\"sqi\":{\"contact\":false}}"
+            });
+            Assert.AreEqual(1, events);
+            Assert.IsFalse(lastContact);
+
+            method.Invoke(coordinator, new object[]
+            {
+                "{\"type\":\"sample\",\"seq\":2,\"t_ms\":80," +
+                "\"ppg\":{\"red\":50000,\"ir\":60000}," +
+                "\"sqi\":{\"contact\":true}}"
+            });
+            Assert.AreEqual(2, events);
+            Assert.IsTrue(lastContact);
+            Assert.IsFalse(coordinator.LastMeasurement.BpmEstimate.HasValue);
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(go);
         }
     }
 
