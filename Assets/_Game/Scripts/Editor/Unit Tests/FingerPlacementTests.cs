@@ -1,4 +1,5 @@
 using Ibit.Core.Oximetry.Placement;
+using Ibit.Core.Game;
 using NUnit.Framework;
 
 public class FingerPlacementTests
@@ -78,6 +79,33 @@ public class FingerPlacementTests
         Assert.AreEqual(FingerPlacementState.TelemetryLost, state.Tick(2.1f));
         state.ObserveContact(2.2f, true);
         Assert.AreEqual(FingerPlacementState.Recovering, state.Tick(2.2f));
+    }
+
+    [Test]
+    public void PauseOwnershipDoesNotReleaseAnExistingLegacyPause()
+    {
+        GameManager.ReleaseFingerPlacementPause();
+        GameManager.UnPauseGame();
+        try
+        {
+            GameManager.PauseGame();
+            Assert.IsFalse(GameManager.TryPauseForFingerPlacement());
+            Assert.IsTrue(GameManager.GameIsPaused);
+            GameManager.UnPauseGame();
+            Assert.IsFalse(GameManager.GameIsPaused);
+
+            Assert.IsTrue(GameManager.TryPauseForFingerPlacement());
+            GameManager.PauseGame(); // Security/manual pause while placement owns it.
+            GameManager.ReleaseFingerPlacementPause();
+            Assert.IsTrue(GameManager.GameIsPaused); // Legacy still owns the pause.
+            GameManager.UnPauseGame();
+            Assert.IsFalse(GameManager.GameIsPaused);
+        }
+        finally
+        {
+            GameManager.ReleaseFingerPlacementPause();
+            GameManager.UnPauseGame();
+        }
     }
 
     [Test]

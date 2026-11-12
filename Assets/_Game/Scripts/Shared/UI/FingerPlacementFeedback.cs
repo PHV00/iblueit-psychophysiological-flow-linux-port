@@ -59,6 +59,14 @@ namespace Ibit.Core.Oximetry.Placement
             Refresh();
         }
 
+        private void Update()
+        {
+            // Covers initialization when the persistent bootstrap is executed
+            // after the active scene has already been loaded in the Editor.
+            if (root == null && monitor != null && monitor.SessionActive)
+                CreateOverlayIfNeeded(SceneManager.GetActiveScene());
+        }
+
         private void CreateOverlayIfNeeded(Scene scene)
         {
             if (monitor == null || !monitor.SessionActive) return;

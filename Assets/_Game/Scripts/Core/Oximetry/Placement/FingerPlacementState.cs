@@ -133,13 +133,15 @@ namespace Ibit.Core.Oximetry.Placement
             if (!connected)
                 return State = FingerPlacementState.DeviceDisconnected;
             if (!received)
-                return State = FingerPlacementState.WaitingForData;
+                return State == FingerPlacementState.TelemetryLost
+                    ? State : (State = FingerPlacementState.WaitingForData);
             if (now - lastSampleAt > timeoutSeconds)
             {
                 // A missing JSON stream is not proof the user removed the finger.
-                // Require a fresh stable-contact period after a telemetry gap.
+                // Restart loss counting on the first sample after telemetry resumes.
                 contact = false;
-                restoredSince = -1f;
+                received = false;
+                absentSince = restoredSince = -1f;
                 recoveryRequired = true;
                 return State = FingerPlacementState.TelemetryLost;
             }

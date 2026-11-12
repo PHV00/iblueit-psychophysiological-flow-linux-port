@@ -9,6 +9,7 @@ using System.Threading;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using Ibit.Core.Oximetry;
+using Ibit.Core.Oximetry.Placement;
 
 namespace Ibit.Core.Serial
 {
@@ -64,6 +65,11 @@ namespace Ibit.Core.Serial
             // The modern serial controller forwards data; it does NOT open another COM.
             go.AddComponent<SerialControllerPitaco24>();
             go.AddComponent<PpgProcessingCoordinator>();
+            // Positioning state machine, presentation and independent pause.
+            // All share this existing serial manager; no second COM port.
+            go.AddComponent<FingerPlacementMonitor>();
+            go.AddComponent<FingerPlacementPauseBridge>();
+            go.AddComponent<FingerPlacementFeedback>();
         }
 
         private void Awake()
