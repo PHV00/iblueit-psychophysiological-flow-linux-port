@@ -413,13 +413,13 @@ namespace Ibit.Core.Oximetry
             if (!IsGate01ApprovedForSample(sample.TimeMs))
             {
                 blockedByGate01++;
-                string reason = gate01State == Gate01State.Waiting
+                string gateBlockReason = gate01State == Gate01State.Waiting
                     ? "Aguardando aprovacao G1"
                     : gate01State == Gate01State.Failed
                         ? "G1 reprovado: reason=" + lastGate01Reason
                         : "G1 expirado: aguardando nova avaliacao";
                 LastMeasurement = new PpgMeasurement(sample.TimeMs, 0,
-                    null, null, null, 0, reason);
+                    null, null, null, 0, gateBlockReason);
                 return;
             }
 
