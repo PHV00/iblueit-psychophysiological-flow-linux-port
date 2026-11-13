@@ -5,6 +5,8 @@ using Ibit.Core.Util;
 using Ibit.Plataform.Camera;
 using UnityEngine;
 using Ibit.Core.Game;
+using Ibit.Core.Oximetry;
+using System.Globalization;
 
 namespace Ibit.Plataform
 {
@@ -45,6 +47,119 @@ namespace Ibit.Plataform
         public float RRValue; //Variável responsável por mostrar na tela a frequência respiratória
         public bool oxiActive = false;
         public float auxValuesOxi;
+
+        // Experimental PITACO 2.4 HUD refresh only. Keep the 8-second PPG
+        // estimation window, 5-second G1 and the legacy oxi O;10 schedule intact.
+        public const float Pitaco24HudIntervalSeconds = 1f;
+
+        // Only the visual side of Player is bridged in phase 1.
+        // The existing STATIC sensorValueOxi* fields remain owned by the
+        // legacy oximeter, so the Mixer/DeepDDA are not affected yet.
+        private bool pitaco24OxiSourceActive;
+        private bool pitaco24VisualPublished;
+        private double? pitaco24DisplayedBpm;
+        private double? pitaco24DisplayedSpO2;
+        private float nextPitaco24DisplayTime;
+        private PpgProcessingCoordinator pitaco24PpgCoordinator;
+
+        public string OximetryHudText
+        {
+            get
+            {
+                return pitaco24OxiSourceActive
+                    ? FormatPitaco24Oximetry(pitaco24DisplayedBpm,
+                        pitaco24DisplayedSpO2)
+                    : $"HR: {HRValue} bpm\nSPO2: {SPO2Value} %";
+            }
+        }
+
+        // Keep the existing public API for tests and the two minigames,
+        // but centralize the visual string layout in the shared presenter.
+        public static string FormatPitaco24Oximetry(double? bpm, double? spo2Demo)
+        {
+            return Ibit.Core.Oximetry.UI.OximetryHudPresenter.FormatPitaco24Values(
+                bpm, spo2Demo);
+        }
+
+        private void UpdatePitaco24Oximetry()
+        {
+            var manager = PitacoConnectionManager.Active;
+            bool connected = manager != null &&
+                manager.ConnectedVersion == PitacoConnectionManager.Version.Pitaco24;
+
+            if (!connected)
+            {
+                if (pitaco24OxiSourceActive)
+                {
+                    pitaco24OxiSourceActive = false;
+                    pitaco24VisualPublished = false;
+                    pitaco24DisplayedBpm = null;
+                    pitaco24DisplayedSpO2 = null;
+                    nextPitaco24DisplayTime = 0f;
+                    oxiActive = false;
+                    // A separate legacy oximeter can repopulate the HUD with
+                    // its next reading; do not impersonate its serial connection.
+                }
+                return;
+            }
+
+            // A 2.4 connection identifies the source, not a valid measurement.
+            pitaco24OxiSourceActive = true;
+            oxiActive = true; // Existing HUD scripts remain the entry point.
+
+            if (pitaco24PpgCoordinator == null)
+                pitaco24PpgCoordinator = manager.GetComponent<PpgProcessingCoordinator>();
+
+            var sample = pitaco24PpgCoordinator != null
+                ? pitaco24PpgCoordinator.LastMeasurement : null;
+
+            if (pitaco24PpgCoordinator == null ||
+                !pitaco24PpgCoordinator.OpticalContactConfirmed ||
+                sample == null ||
+                (!sample.BpmEstimate.HasValue && !sample.SpO2DemoPercent.HasValue))
+            {
+                // Missing contact, a reset window, timeouts or disconnection
+                // immediately hide the old readings; never display stale data.
+                pitaco24DisplayedBpm = null;
+                pitaco24DisplayedSpO2 = null;
+                pitaco24VisualPublished = false;
+                nextPitaco24DisplayTime = 0f;
+                HRValue = 0f;
+                SPO2Value = 0f;
+                return;
+            }
+
+            // A channel which has become unavailable is cleared immediately,
+            // even while the 1-second visual publication interval is running.
+            bool invalidated =
+                (pitaco24DisplayedBpm.HasValue && !sample.BpmEstimate.HasValue) ||
+                (pitaco24DisplayedSpO2.HasValue && !sample.SpO2DemoPercent.HasValue);
+            if (invalidated)
+            {
+                if (!sample.BpmEstimate.HasValue) pitaco24DisplayedBpm = null;
+                if (!sample.SpO2DemoPercent.HasValue) pitaco24DisplayedSpO2 = null;
+                HRValue = pitaco24DisplayedBpm.HasValue
+                    ? (float)pitaco24DisplayedBpm.Value : 0f;
+                SPO2Value = pitaco24DisplayedSpO2.HasValue
+                    ? (float)pitaco24DisplayedSpO2.Value : 0f;
+            }
+
+            // Experimental PITACO 2.4 refreshes at most once per second.
+            // The first valid reading appears immediately after the 8-second
+            // processing window. Invalid readings are cleared above immediately.
+            if (!pitaco24VisualPublished || Time.unscaledTime >= nextPitaco24DisplayTime)
+            {
+                pitaco24DisplayedBpm = sample.BpmEstimate;
+                pitaco24DisplayedSpO2 = sample.SpO2DemoPercent;
+                HRValue = pitaco24DisplayedBpm.HasValue
+                    ? (float)pitaco24DisplayedBpm.Value : 0f;
+                SPO2Value = pitaco24DisplayedSpO2.HasValue
+                    ? (float)pitaco24DisplayedSpO2.Value : 0f;
+                pitaco24VisualPublished = true;
+                nextPitaco24DisplayTime =
+                    Time.unscaledTime + Pitaco24HudIntervalSeconds;
+            }
+        }
 
         public object outputDoPlayer { get; set; }
 
@@ -132,15 +247,20 @@ namespace Ibit.Plataform
                 // Se o Oxímetro estiver conectado
                 if (sco.IsConnected)
                 {
-                    oxiActive = true;
+                    if (!pitaco24OxiSourceActive) oxiActive = true;
                     string[] auxValuesOxi = msg.Split(',');
                 
                     sensorValueOxiHR = Parsers.Float(auxValuesOxi[0]);
                     sensorValueOxiSPO = Parsers.Float(auxValuesOxi[1]);
                 
-                    HRValue = sensorValueOxiHR; //Variável responsável por mostrar na tela a HR
-                    SPO2Value = sensorValueOxiSPO; //Variável responsável por mostrar na tela a SPO2
-                } else {
+                    // Legacy data remain available to the current Mixer;
+                    // when 2.4 is connected it owns only the visual fields.
+                    if (!pitaco24OxiSourceActive)
+                    {
+                        HRValue = sensorValueOxiHR;
+                        SPO2Value = sensorValueOxiSPO;
+                    }
+                } else if (!pitaco24OxiSourceActive) {
                     oxiActive = false;
                 }
 

@@ -8,7 +8,6 @@ namespace Ibit.MainMenu.UI
     [RequireComponent(typeof(Image))]
     public class Pitaco24Status : MonoBehaviour
     {
-        [SerializeField] private SerialControllerPitaco24 serialController;
         [SerializeField] private Sprite offline;
         [SerializeField] private Sprite online;
 
@@ -17,11 +16,6 @@ namespace Ibit.MainMenu.UI
         private void Awake()
         {
             statusImage = GetComponent<Image>();
-            if (serialController == null)
-                serialController = FindObjectOfType<SerialControllerPitaco24>();
-
-            if (serialController == null)
-                Debug.LogWarning("[PITACO 2.4] SerialControllerPitaco24 nao encontrado na cena.");
         }
 
         private void FixedUpdate()
@@ -29,7 +23,12 @@ namespace Ibit.MainMenu.UI
             if (statusImage == null)
                 return;
 
-            bool connected = serialController != null && serialController.IsConnected;
+            // A versao fisica vem do manager que possui a unica porta COM.
+            // Nao consultar uma possivel instancia de controlador de cena.
+            var manager = PitacoConnectionManager.Active;
+            bool connected = manager != null &&
+                manager.ConnectedVersion == PitacoConnectionManager.Version.Pitaco24;
+
             Sprite target = connected ? online : offline;
             if (target != null && statusImage.sprite != target)
                 statusImage.sprite = target;

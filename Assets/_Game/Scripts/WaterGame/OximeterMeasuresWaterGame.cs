@@ -1,24 +1,31 @@
-﻿using UnityEngine;
-using UnityEngine.UI;
+using Ibit.Core.Oximetry.UI;
+using UnityEngine;
 
 namespace Ibit.WaterGame
 {
-    public class OximeterMeasuresWaterGame : MonoBehaviour
+    /// <summary>
+    /// Preserves this scene's serialized MonoBehaviour reference.
+    /// The shared presenter owns PITACO 2.4 status and UI rendering;
+    /// this adapter only reads the scene's existing legacy Player.
+    /// </summary>
+    public class OximeterMeasuresWaterGame : OximetryHudPresenter
     {
-        private Player plr;
-        private void Awake()
+        private Player player;
+
+        protected override string ReadPlayerText(bool pitaco24Connected)
         {
-            plr = FindObjectOfType<Player>();
+            if (player == null)
+                player = FindObjectOfType<Player>();
+            if (player == null)
+                return null;
+            return pitaco24Connected || player.oxiActive
+                ? player.OximetryHudText
+                : string.Empty;
         }
 
-        private void Update()
-        {   
-            if (plr.oxiActive)
-            { // Se o oxímetro estiver conectado, exibe seus valores
-                GetComponent<Text>().text = $"HR: {plr.HRValue} bpm\nSPO2: {plr.SPO2Value} %";
-            } else {
-                GetComponent<Text>().text = "";
-            }
+        protected override void Update()
+        {
+            base.Update();
         }
     }
 }

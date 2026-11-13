@@ -56,6 +56,22 @@ public class DeepDDAAgent : Agent
     private float lastEpisodePerformance = 0;
     private int currentBorgScale;
     private int lastBorgScale;
+    private bool reportedNonFiniteObservation;
+
+    // Keep the original observation shape; never submit NaN/Infinity to ML-Agents.
+    private float FiniteObservation(float value, string source)
+    {
+        if (!float.IsNaN(value) && !float.IsInfinity(value))
+            return value;
+
+        if (!reportedNonFiniteObservation)
+        {
+            reportedNonFiniteObservation = true;
+            Debug.LogWarning("[DeepDDA] Observacao nao finita em " + source +
+                "; usando 0 nesta leitura. Verifique os dados de calibracao e fluxo.");
+        }
+        return 0f;
+    }
     private int scaleBorgDelta;
     
     protected new void Awake()
@@ -200,28 +216,34 @@ public class DeepDDAAgent : Agent
         sensor.AddObservation(consecutiveObstacleHit);
         sensor.AddObservation(consecutiveTargetsHit);
         sensor.AddObservation(consecutiveObstacleMiss);
-        sensor.AddObservation(StageModel.Loaded.ObjectSpeedFactor);
-        if(spwn.TargetsSucceeded != null)
-            sensor.AddObservation(spwn.TargetsSucceeded);
-        sensor.AddObservation(spwn.TargetsFailed);
+        sensor.AddObservation(StageModel.Loaded != null
+            ? FiniteObservation(StageModel.Loaded.ObjectSpeedFactor, "velocidade") : 0f);
+        // Unity/ML-Agents can call CollectObservations again during OnDisable.
+        sensor.AddObservation(spwn != null ? spwn.TargetsSucceeded : 0);
+        sensor.AddObservation(spwn != null ? spwn.TargetsFailed : 0);
         //sensor.AddObservation(spwn.ObstaclesFailed);
         //sensor.AddObservation(spwn.ObstaclesSucceeded);
-        sensor.AddObservation(currentPerformance);
+        sensor.AddObservation(FiniteObservation(currentPerformance, "currentPerformance"));
         sensor.AddObservation(flowState);
         sensor.AddObservation(scaleBorgDelta);
-        sensor.AddObservation(performanceDelta);
-        sensor.AddObservation(episodePerformanceDelta);
+        sensor.AddObservation(FiniteObservation(performanceDelta, "performanceDelta"));
+        sensor.AddObservation(FiniteObservation(episodePerformanceDelta, "episodePerformanceDelta"));
 
         // Observa CG - pico e duração.
-        if(sessionSucceeded == 0)
+        if (sessionSucceeded == 0)
         {
-            sensor.AddObservation(-Pacient.Loaded.CapacitiesPitaco.InsPeakFlow * GameManager.CapacityMultiplierPlataform);
-            sensor.AddObservation(Pacient.Loaded.CapacitiesPitaco.ExpPeakFlow * GameManager.CapacityMultiplierPlataform);    
-        }
-        if(sessionSucceeded == 0)
-        {
-            sensor.AddObservation(-Pacient.Loaded.CapacitiesPitaco.InsFlowDuration * GameManager.CapacityMultiplierPlataform);
-            sensor.AddObservation(Pacient.Loaded.CapacitiesPitaco.ExpFlowDuration * GameManager.CapacityMultiplierPlataform);            
+            if (Pacient.Loaded != null)
+            {
+                sensor.AddObservation(FiniteObservation(-Pacient.Loaded.CapacitiesPitaco.InsPeakFlow * GameManager.CapacityMultiplierPlataform, "pico inspiratorio"));
+                sensor.AddObservation(FiniteObservation(Pacient.Loaded.CapacitiesPitaco.ExpPeakFlow * GameManager.CapacityMultiplierPlataform, "pico expiratorio"));
+                sensor.AddObservation(FiniteObservation(-Pacient.Loaded.CapacitiesPitaco.InsFlowDuration * GameManager.CapacityMultiplierPlataform, "duracao inspiratoria"));
+                sensor.AddObservation(FiniteObservation(Pacient.Loaded.CapacitiesPitaco.ExpFlowDuration * GameManager.CapacityMultiplierPlataform, "duracao expiratoria"));
+            }
+            else
+            {
+                // Avoid teardown NRE without reducing the observations count.
+                for (int i = 0; i < 4; i++) sensor.AddObservation(0f);
+            }
         }
     }
 
@@ -347,14 +369,18 @@ public class DeepDDAAgent : Agent
                     minValueFLi = negativeFlows.Min(fd => fd.Value);
                     maxValueFLi = negativeFlows.Max(fd => fd.Value);
                     averageValueFLi = negativeFlows.Average(fd => fd.Value);
-                    normalizedValueFLi = (averageValueFLi - maxValueFLi) / (minValueFLi - maxValueFLi);
+                    float inspiratoryRange = minValueFLi - maxValueFLi;
+                    if (Mathf.Abs(inspiratoryRange) > 1e-6f)
+                        normalizedValueFLi = (averageValueFLi - maxValueFLi) / inspiratoryRange;
                 }
                 if (positiveFlows.Any())
                 {
                     minValueFLe = positiveFlows.Min(fd => fd.Value);
                     maxValueFLe = positiveFlows.Max(fd => fd.Value);
                     averageValueFLe = positiveFlows.Average(fd => fd.Value);
-                    normalizedValueFLe = (averageValueFLe - minValueFLe) / (maxValueFLe - minValueFLe);
+                    float expiratoryRange = maxValueFLe - minValueFLe;
+                    if (Mathf.Abs(expiratoryRange) > 1e-6f)
+                        normalizedValueFLe = (averageValueFLe - minValueFLe) / expiratoryRange;
                 }
             }
             if (averageValueFLi < insPeak * GameManager.CapacityMultiplierPlataformMax && averageValueFLe > expPeak * GameManager.CapacityMultiplierPlataformMax)
@@ -378,8 +404,8 @@ public class DeepDDAAgent : Agent
     // Nível de dificuldade atual do jogo (easy, flow ou hard)
     private int GetCurrentFlowState()
 	{
-        currentPerformance = 0.5f * flowPsico + 0.5f * flowFisio;
-        episodePerformanceDelta = currentPerformance - lastEpisodePerformance; 
+        currentPerformance = FiniteObservation(0.5f * flowPsico + 0.5f * flowFisio, "performance calculada");
+        episodePerformanceDelta = FiniteObservation(currentPerformance - lastEpisodePerformance, "delta de episodio"); 
 		if(currentPerformance < GameManager.CapacityMultiplierPlataform || consecutiveTargetsMiss == -3 || consecutiveObstacleHit == -3 || episodePerformanceDelta < -0.1)
 			return 2; // hard
         else if(currentPerformance >= GameManager.CapacityMultiplierPlataform && (episodePerformanceDelta >= -0.1 && episodePerformanceDelta <= 0.1))
@@ -536,7 +562,7 @@ public class DeepDDAAgent : Agent
     //     // VER como usar PlaySessionsDone
     //     // RF-02.03 - AJUSTE DE DIFICULDADE ENTRE SESSÕES POR MEIO DO DESEMPENHO
     //     // RF-02.04 - AJUSTE DE CARGA ENTRE SESSÕES POR MEIO DA ESCALA DE BORG
-    //     performanceDelta = currentPerformance - lastPerformance; // verificar lugar e momento
+    //     performanceDelta = FiniteObservation(currentPerformance - lastPerformance, "delta de performance"); // verificar lugar e momento
     //     currentBorgScale = PlataformLogger.selectedBorgScale; // verificar lugar e momento
     //     scaleBorgDelta = currentBorgScale - lastBorgScale; // verificar lugar e momento
 
@@ -742,7 +768,7 @@ public class DeepDDAAgent : Agent
     // VER como usar PlaySessionsDone
     // RF-02.03 - AJUSTE DE DIFICULDADE ENTRE SESSÕES POR MEIO DO DESEMPENHO
     // RF-02.04 - AJUSTE DE CARGA ENTRE SESSÕES POR MEIO DA ESCALA DE BORG
-    performanceDelta = currentPerformance - lastPerformance; // verificar lugar e momento
+    performanceDelta = FiniteObservation(currentPerformance - lastPerformance, "delta de performance"); // verificar lugar e momento
     currentBorgScale = PlataformLogger.selectedBorgScale; // verificar lugar e momento
     scaleBorgDelta = currentBorgScale - lastBorgScale; // verificar lugar e momento
 
