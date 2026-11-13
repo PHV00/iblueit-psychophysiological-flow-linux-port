@@ -224,10 +224,27 @@ public class PpgProcessingTests
             Assert.IsTrue(coordinator.LastMeasurement.BpmEstimate.HasValue);
             Assert.IsTrue(coordinator.LastMeasurement.SpO2DemoPercent.HasValue);
 
-            // A single contact-loss frame must immediately clear both numbers.
+            // The first two contact failures quarantine the raw samples:
+            // they suspend old numbers but preserve G1 and the 8-second buffer.
+            for (int i = 420; i < 422; i++)
+            {
+                receive.Invoke(coordinator, new object[]
+                {
+                    "{\"type\":\"sample\",\"seq\":" + i +
+                    ",\"t_ms\":" + (i * 40) +
+                    ",\"ppg\":{\"red\":60000,\"ir\":80000}," +
+                    "\"sqi\":{\"contact\":false}}"
+                });
+                Assert.IsTrue(coordinator.OpticalContactConfirmed);
+                Assert.AreEqual("Passed", coordinator.Gate01Status);
+                Assert.IsFalse(coordinator.LastMeasurement.BpmEstimate.HasValue);
+                Assert.IsFalse(coordinator.LastMeasurement.SpO2DemoPercent.HasValue);
+            }
+
+            // Third consecutive failure confirms removal and clears the window.
             receive.Invoke(coordinator, new object[]
             {
-                "{\"type\":\"sample\",\"seq\":420,\"t_ms\":16800," +
+                "{\"type\":\"sample\",\"seq\":422,\"t_ms\":16880," +
                 "\"ppg\":{\"red\":60000,\"ir\":80000}," +
                 "\"sqi\":{\"contact\":false}}"
             });
@@ -235,7 +252,7 @@ public class PpgProcessingTests
             Assert.AreEqual("Waiting", coordinator.Gate01Status);
             Assert.IsFalse(coordinator.LastMeasurement.BpmEstimate.HasValue);
             Assert.IsFalse(coordinator.LastMeasurement.SpO2DemoPercent.HasValue);
-            Assert.AreEqual(421, contactEvents);
+            Assert.AreEqual(423, contactEvents);
         }
         finally
         {
@@ -392,9 +409,13 @@ public class PpgProcessingTests
             ReceiveG1TestJson(coordinator, MakeGate01TestJson(10000, true, 0));
             Assert.AreEqual("Passed", coordinator.Gate01Status);
             ReceiveG1TestJson(coordinator, MakeGate01TestSample(127, false, 10));
+            ReceiveG1TestJson(coordinator, MakeGate01TestSample(128, false, 10));
+            Assert.AreEqual("Passed", coordinator.Gate01Status);
+            Assert.IsTrue(coordinator.OpticalContactConfirmed);
+            Assert.IsFalse(coordinator.LastMeasurement.SpO2DemoPercent.HasValue);
+            ReceiveG1TestJson(coordinator, MakeGate01TestSample(129, false, 10));
             Assert.AreEqual("Waiting", coordinator.Gate01Status);
             Assert.IsFalse(coordinator.OpticalContactConfirmed);
-            Assert.IsFalse(coordinator.LastMeasurement.SpO2DemoPercent.HasValue);
         }
         finally { UnityEngine.Object.DestroyImmediate(gameObject); }
     }
@@ -448,4 +469,75 @@ public class PpgProcessingTests
             data.Add(new PpgSample((ushort)i, (uint)(i * 40), 0, 80000));
         Assert.IsFalse(PpgSignalProcessor.TryProcess(data, out processed, out reason));
     }
+
+    [Test]
+    public void TwoIsolatedContactFailuresPreserveWindowAndOnlyAllowExperimentalBpm()
+    {
+        var gameObject = new GameObject("PPG two short contact failures");
+        try
+        {
+            var coordinator = gameObject.AddComponent<PpgProcessingCoordinator>();
+            int receivedEvents = 0;
+            coordinator.OnOpticalContactSample += ignored => ++receivedEvents;
+            for (int i = 0; i < 210; i++)
+            {
+                bool contact = i != 140 && i != 141;
+                ReceiveG1TestJson(coordinator,
+                    MakeGate01TestSample(i, contact, contact ? 0 : 10));
+                if (i == 125)
+                    ReceiveG1TestJson(coordinator,
+                        MakeGate01TestJson(5000, true, 0));
+            }
+
+            Assert.AreEqual(210, receivedEvents,
+                "Placement state machine still receives raw contact events.");
+            Assert.IsTrue(coordinator.OpticalContactConfirmed);
+            Assert.AreEqual("Passed", coordinator.Gate01Status);
+            var field = typeof(PpgProcessingCoordinator).GetField(
+                "buffer", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsNotNull(field);
+            var buffer = field.GetValue(coordinator) as PpgSampleBuffer;
+            Assert.IsNotNull(buffer);
+            Assert.Greater(buffer.Count, 190,
+                "The prior rolling window must not be discarded.");
+            Assert.IsTrue(coordinator.LastMeasurement.BpmEstimate.HasValue);
+            Assert.IsFalse(coordinator.LastMeasurement.SpO2DemoPercent.HasValue,
+                "A reconstructed RED/IR gap is not acceptable for SpO2.");
+        }
+        finally { UnityEngine.Object.DestroyImmediate(gameObject); }
+    }
+
+    [Test]
+    public void MarkedOneOrTwoSampleGapsRetainSequenceContinuity()
+    {
+        var buffer = new PpgSampleBuffer();
+        Assert.IsTrue(buffer.Add(new PpgSample(100, 4000, 60000, 80000)));
+        Assert.IsTrue(buffer.Add(new PpgSample(103, 4120, 60010, 80020, 2)));
+        Assert.AreEqual(2, buffer.Count);
+        // Unknown sequence gaps must still reset: only explicitly marked
+        // optical contact gaps are permitted.
+        Assert.IsFalse(buffer.Add(new PpgSample(105, 4200, 60020, 80040)));
+        Assert.AreEqual(1, buffer.Count);
+    }
+
+    [Test]
+    public void ExcessiveNonConsecutiveContactGapsRejectProcessing()
+    {
+        var samples = new List<PpgSample>();
+        for (int i = 0; i < 210; i++)
+        {
+            if (i > 0 && i % 20 == 0) continue;
+            double phase = 2.0 * Math.PI * 75.0 * (i * 0.040) / 60.0;
+            int red = (int)Math.Round(60000.0 + 500.0 * Math.Sin(phase));
+            int ir = (int)Math.Round(80000.0 + 1000.0 * Math.Sin(phase));
+            byte previousGap = (byte)(i > 1 && (i - 1) % 20 == 0 ? 1 : 0);
+            samples.Add(new PpgSample((ushort)i, (uint)(i * 40),
+                red, ir, previousGap));
+        }
+        PpgProcessedWindow processed;
+        string reason;
+        Assert.IsFalse(PpgSignalProcessor.TryProcess(samples, out processed, out reason));
+        StringAssert.Contains("Too many short optical-contact gaps", reason);
+    }
+
 }
