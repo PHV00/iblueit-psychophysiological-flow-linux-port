@@ -8,13 +8,17 @@ namespace Ibit.Core.Oximetry
         public readonly uint TimeMs;
         public readonly int Red;
         public readonly int Ir;
+        // 0-2 rejected contact observations immediately before this real sample.
+        public readonly byte SkippedContactSamplesBefore;
 
-        public PpgSample(ushort sequence, uint timeMs, int red, int ir)
+        public PpgSample(ushort sequence, uint timeMs, int red, int ir,
+            byte skippedContactSamplesBefore = 0)
         {
             Sequence = sequence;
             TimeMs = timeMs;
             Red = red;
             Ir = ir;
+            SkippedContactSamplesBefore = skippedContactSamplesBefore;
         }
 
         public static bool TryCreate(int sequence, long timeMs, int red, int ir, out PpgSample sample)

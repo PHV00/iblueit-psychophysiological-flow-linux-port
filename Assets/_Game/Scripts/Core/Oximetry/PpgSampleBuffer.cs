@@ -26,9 +26,12 @@ namespace Ibit.Core.Oximetry
             if (samples.Count > 0)
             {
                 PpgSample previous = samples[samples.Count - 1];
-                int expected = (previous.Sequence + 1) & 0xFFFF;
+                // Only known 1-2 contact gaps may skip sequence slots.
+                // Any other lost sample still restarts the rolling window.
+                int gap = sample.SkippedContactSamplesBefore;
+                int expected = (previous.Sequence + 1 + gap) & 0xFFFF;
                 uint elapsed = unchecked(sample.TimeMs - previous.TimeMs);
-                if (sample.Sequence != expected || elapsed > MaxReadGapMs)
+                if (gap > 2 || sample.Sequence != expected || elapsed > MaxReadGapMs)
                 {
                     Clear();
                     continuous = false;

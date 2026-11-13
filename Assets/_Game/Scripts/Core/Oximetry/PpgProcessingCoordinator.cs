@@ -116,6 +116,11 @@ namespace Ibit.Core.Oximetry
         private const uint Gate01MaxAgeMs = 6500;
         private const float Gate01MaxAgeSeconds = 6.5f;
         private const int Gate01MinimumSamples = 50;
+        private const int ContactLossConfirmationSamples = 3;
+        private int consecutiveNoContactSamples;
+        private int pendingShortContactGaps;
+        private long toleratedShortContactGaps;
+        private long confirmedContactLosses;
 
         private Gate01State gate01State = Gate01State.Waiting;
         private bool gate01Received;
@@ -193,6 +198,9 @@ namespace Ibit.Core.Oximetry
                     " | G1_invalidos=" + rejectedGate01Frames +
                     " | G1_amostras_bloqueadas=" + blockedByGate01 +
                     " | contato=" + OpticalContactConfirmed +
+                    " | contatoFalhasSeq=" + consecutiveNoContactSamples +
+                    " | lacunasContatoToleradas=" + toleratedShortContactGaps +
+                    " | perdasContatoConfirmadas=" + confirmedContactLosses +
                     " | buffer=" + buffer.Count +
                     " | estado=" + (measurement != null ? measurement.Status : "sem resultado") +
                     " | BPM=" + (measurement != null && measurement.BpmEstimate.HasValue
@@ -254,6 +262,8 @@ namespace Ibit.Core.Oximetry
         {
             InvalidatePpgWindow(status);
             OpticalContactConfirmed = false;
+            consecutiveNoContactSamples = 0;
+            pendingShortContactGaps = 0;
             lastSampleReceivedAt = -1f;
             ResetGate01();
         }
@@ -364,21 +374,56 @@ namespace Ibit.Core.Oximetry
 
             receivedSampleFrames++;
 
-            // Restore Marco 0.5 optical contact gate. This is NOT G1 SQI
-            // approval and cannot validate physiological quality.
-            // Emit the contact observation first so FingerPlacementMonitor
-            // continues progressing even when measurements are suppressed.
-            bool hasContact = frame.sqi != null && frame.sqi.contact;
-            if (frame.sqi != null)
-                OnOpticalContactSample?.Invoke(hasContact);
+            // Contact is a sample-level observation, independent of G1.
+            // Missing SQI is a protocol error, not evidence of finger-off.
+            if (frame.sqi == null)
+            {
+                invalidSampleFrames++;
+                ResetMeasurements("Amostra sem SQI de contato");
+                return;
+            }
+
+            bool hasContact = frame.sqi.contact;
+            // Keep the finger-placement monitor's existing timing unchanged.
+            OnOpticalContactSample?.Invoke(hasContact);
             if (!hasContact)
             {
                 missingContactFrames++;
-                if (OpticalContactConfirmed || LastMeasurement == null ||
-                    LastMeasurement.Status != "Sem contato optico")
-                    ResetMeasurements("Sem contato optico");
+                if (consecutiveNoContactSamples < ContactLossConfirmationSamples)
+                    ++consecutiveNoContactSamples;
+
+                if (consecutiveNoContactSamples >= ContactLossConfirmationSamples)
+                {
+                    // Confirmed removal: clear buffer and revoke previous G1.
+                    // Further false frames must not repeatedly reset the state.
+                    if (OpticalContactConfirmed)
+                    {
+                        ++confirmedContactLosses;
+                        ResetMeasurements("Sem contato optico");
+                        consecutiveNoContactSamples = ContactLossConfirmationSamples;
+                    }
+                    else
+                        LastMeasurement = new PpgMeasurement(0, 0, null, null,
+                            null, 0, "Sem contato optico");
+                    return;
+                }
+
+                // Quarantine 1-2 short failures, preserving the previous good
+                // samples but never adding suspicious RED/IR to the buffer.
+                if (OpticalContactConfirmed)
+                {
+                    ++pendingShortContactGaps;
+                    LastMeasurement = new PpgMeasurement(0, 0, null, null,
+                        null, 0, "Contato optico instavel (" +
+                        consecutiveNoContactSamples + "/3)");
+                }
                 return;
             }
+
+            // Only confirmed existing contact can bridge 1-2 skipped frames.
+            int toleratedGaps = OpticalContactConfirmed ? pendingShortContactGaps : 0;
+            consecutiveNoContactSamples = 0;
+            pendingShortContactGaps = 0;
             OpticalContactConfirmed = true;
 
             // Firmware resets the current G1 evaluation to reason=1 on a
@@ -399,6 +444,13 @@ namespace Ibit.Core.Oximetry
                 LastMeasurement = new PpgMeasurement(0, 0, null, null,
                     null, 0, "Amostra PPG invalida: seq/t_ms/RED/IR");
                 return;
+            }
+
+            if (toleratedGaps > 0)
+            {
+                sample = new PpgSample(sample.Sequence, sample.TimeMs,
+                    sample.Red, sample.Ir, (byte)toleratedGaps);
+                toleratedShortContactGaps += toleratedGaps;
             }
 
             bool continuous = buffer.Add(sample);
@@ -445,7 +497,9 @@ namespace Ibit.Core.Oximetry
                 hasBpm ? (double?)bpm : null,
                 hasSpO2 ? (double?)spo2Demo : null,
                 hasSpO2 ? (double?)ratio : null,
-                autocorrelation, "EXPERIMENTAL - NAO CALIBRADO");
+                autocorrelation, processed.ReconstructedSamples > 0
+                    ? "EXPERIMENTAL - BPM com lacunas reconstruidas; SpO2 bloqueada"
+                    : "EXPERIMENTAL - NAO CALIBRADO");
             OnMeasurement?.Invoke(LastMeasurement);
 
 

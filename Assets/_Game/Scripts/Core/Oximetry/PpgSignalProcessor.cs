@@ -12,9 +12,12 @@ namespace Ibit.Core.Oximetry
         public readonly double IrAcRms;
         public readonly double[] RedAc;
         public readonly double[] IrAc;
+        // Reconstructed points are not real optical measurements.
+        public readonly int ReconstructedSamples;
 
         internal PpgProcessedWindow(double samplingHz, double redDc, double irDc,
-            double[] redAc, double[] irAc, double redAcRms, double irAcRms)
+            double[] redAc, double[] irAc, double redAcRms, double irAcRms,
+            int reconstructedSamples)
         {
             SamplingHz = samplingHz;
             RedDc = redDc;
@@ -23,6 +26,7 @@ namespace Ibit.Core.Oximetry
             IrAc = irAc;
             RedAcRms = redAcRms;
             IrAcRms = irAcRms;
+            ReconstructedSamples = reconstructedSamples;
         }
     }
 
@@ -49,19 +53,9 @@ namespace Ibit.Core.Oximetry
             if (duration < MinimumWindowMs)
                 return false;
 
-            // Firmware timestamps mark FIFO reads; neighboring records can share
-            // t_ms. Infer effective fs from sequence-contiguous samples / elapsed time,
-            // rather than the median adjacent timestamp difference used in Python.
-            double fs = (n - 1) * 1000.0 / duration;
-            if (fs < 20.0 || fs > 30.0)
-            {
-                reason = "Effective sample rate outside 20-30 Hz";
-                return false;
-            }
-
-            var red = new double[n];
-            var ir = new double[n];
-            double redSum = 0.0, irSum = 0.0;
+            // Validate raw sequence and distinguish known contact gaps from
+            // unexpected serial/FIFO loss. Never accept invalid ADC values.
+            int reconstructed = 0;
             for (int i = 0; i < n; i++)
             {
                 PpgSample s = samples[i];
@@ -73,22 +67,71 @@ namespace Ibit.Core.Oximetry
                 }
                 if (i > 0)
                 {
-                    PpgSample prev = samples[i - 1];
-                    if (s.Sequence != ((prev.Sequence + 1) & 0xFFFF) ||
-                        unchecked(s.TimeMs - prev.TimeMs) > 750)
+                    PpgSample previous = samples[i - 1];
+                    int missing = s.SkippedContactSamplesBefore;
+                    if (missing > 2 ||
+                        s.Sequence != ((previous.Sequence + 1 + missing) & 0xFFFF) ||
+                        unchecked(s.TimeMs - previous.TimeMs) > 750)
                     {
                         reason = "Sequence or FIFO read time discontinuity";
                         return false;
                     }
+                    reconstructed += missing;
                 }
-                red[i] = s.Red;
-                ir[i] = s.Ir;
-                redSum += red[i];
-                irSum += ir[i];
             }
 
-            double redDc = redSum / n;
-            double irDc = irSum / n;
+            int effectiveCount = n + reconstructed;
+            // Experimental 2% ceiling: repetitive contact failures must not
+            // cause unbounded signal synthesis. Validate with device logs.
+            if (reconstructed * 100 > effectiveCount * 2)
+            {
+                reason = "Too many short optical-contact gaps (>2%)";
+                return false;
+            }
+
+            // Timestamp belongs to FIFO read; use the expected sample slots,
+            // including explicitly quarantined contact gaps, for effective fs.
+            double fs = (effectiveCount - 1) * 1000.0 / duration;
+            if (fs < 20.0 || fs > 30.0)
+            {
+                reason = "Effective sample rate outside 20-30 Hz";
+                return false;
+            }
+
+            var red = new double[effectiveCount];
+            var ir = new double[effectiveCount];
+            double redSum = 0.0, irSum = 0.0;
+            int position = 0;
+            for (int i = 0; i < n; i++)
+            {
+                PpgSample current = samples[i];
+                if (i > 0)
+                {
+                    PpgSample previous = samples[i - 1];
+                    int missing = current.SkippedContactSamplesBefore;
+                    // Only 1-2 missing slots, interpolated for experimental BPM.
+                    // Suspicious RED/IR values are NOT used.
+                    for (int j = 1; j <= missing; j++)
+                    {
+                        double fraction = j / (missing + 1.0);
+                        red[position] = previous.Red +
+                            (current.Red - previous.Red) * fraction;
+                        ir[position] = previous.Ir +
+                            (current.Ir - previous.Ir) * fraction;
+                        redSum += red[position];
+                        irSum += ir[position];
+                        ++position;
+                    }
+                }
+                red[position] = current.Red;
+                ir[position] = current.Ir;
+                redSum += red[position];
+                irSum += ir[position];
+                ++position;
+            }
+
+            double redDc = redSum / effectiveCount;
+            double irDc = irSum / effectiveCount;
             if (redDc <= 0.0 || irDc <= 0.0)
             {
                 reason = "Zero optical DC: ratio undefined";
@@ -99,8 +142,10 @@ namespace Ibit.Core.Oximetry
             double[] redAc = RemoveSlowComponent(red, halfWidth);
             double[] irAc = RemoveSlowComponent(ir, halfWidth);
             result = new PpgProcessedWindow(fs, redDc, irDc,
-                redAc, irAc, RootMeanSquare(redAc), RootMeanSquare(irAc));
-            reason = "Window processed (experimental)";
+                redAc, irAc, RootMeanSquare(redAc), RootMeanSquare(irAc),
+                reconstructed);
+            reason = reconstructed == 0 ? "Window processed (experimental)" :
+                "Window processed (experimental, short gaps reconstructed)";
             return true;
         }
 

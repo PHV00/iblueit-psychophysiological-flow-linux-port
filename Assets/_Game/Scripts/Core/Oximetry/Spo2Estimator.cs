@@ -14,7 +14,9 @@ namespace Ibit.Core.Oximetry
         {
             spo2DemoPercent = 0.0;
             ratio = 0.0;
-            if (input == null || input.RedDc <= 0.0 || input.IrDc <= 0.0 ||
+            // A synthesized RED/IR gap is not valid input for SpO2.
+            if (input == null || input.ReconstructedSamples > 0 ||
+                input.RedDc <= 0.0 || input.IrDc <= 0.0 ||
                 input.RedAcRms <= 1e-9 || input.IrAcRms <= 1e-9)
                 return false;
 
