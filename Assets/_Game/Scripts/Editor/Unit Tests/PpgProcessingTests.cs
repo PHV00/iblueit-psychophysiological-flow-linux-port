@@ -132,6 +132,31 @@ public class PpgProcessingTests
     }
 
     [Test]
+    public void SharedPresenterFormatsPitaco24NumbersWithoutChangingLegacyContract()
+    {
+        var text = Ibit.Core.Oximetry.UI.OximetryHudPresenter.FormatPitaco24Values(
+            75.1, null);
+        StringAssert.Contains("HR [2.4]: 75.1 bpm", text);
+        StringAssert.Contains("SpO2 DEMO: -- %", text);
+        Assert.AreEqual(Ibit.Plataform.Player.FormatPitaco24Oximetry(75.1, null),
+            text);
+    }
+
+    [Test]
+    public void SharedPresenterUsesPlacementStateOnlyForInformativeNoContactText()
+    {
+        string waiting = Ibit.Core.Oximetry.UI.OximetryHudPresenter
+            .FormatNoContactStatus(Ibit.Core.Oximetry.Placement.FingerPlacementState.WaitingForData);
+        string warning = Ibit.Core.Oximetry.UI.OximetryHudPresenter
+            .FormatNoContactStatus(Ibit.Core.Oximetry.Placement.FingerPlacementState.Warning);
+        string lost = Ibit.Core.Oximetry.UI.OximetryHudPresenter
+            .FormatNoContactStatus(Ibit.Core.Oximetry.Placement.FingerPlacementState.TelemetryLost);
+        StringAssert.Contains("sem contato optico", waiting);
+        StringAssert.Contains("reposicione o dedo", warning);
+        StringAssert.Contains("telemetria ausente", lost);
+    }
+
+    [Test]
     public void PlayerPreservesBpmWhenDemoSpo2Unavailable()
     {
         var text = Player.FormatPitaco24Oximetry(75, null);

@@ -73,15 +73,12 @@ namespace Ibit.Plataform
             }
         }
 
-        // Shared formatting lives in Player, not in an extra hub/formatter.
-        // A missing value is never converted to a misleading numeric zero.
+        // Keep the existing public API for tests and the two minigames,
+        // but centralize the visual string layout in the shared presenter.
         public static string FormatPitaco24Oximetry(double? bpm, double? spo2Demo)
         {
-            string hr = bpm.HasValue
-                ? bpm.Value.ToString("F1", CultureInfo.InvariantCulture) : "--";
-            string spo2 = spo2Demo.HasValue
-                ? spo2Demo.Value.ToString("F1", CultureInfo.InvariantCulture) : "--";
-            return $"HR [2.4]: {hr} bpm\nSpO2 DEMO: {spo2} %";
+            return Ibit.Core.Oximetry.UI.OximetryHudPresenter.FormatPitaco24Values(
+                bpm, spo2Demo);
         }
 
         private void UpdatePitaco24Oximetry()
